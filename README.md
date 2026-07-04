@@ -10,7 +10,7 @@
 ## 🚀 About TrustFi
 
 **TrustFi** is an AI-powered, privacy-preserving decentralized lending platform that enables users to apply for undercollateralized loans without exposing sensitive financial information.
-
+ 
 The platform combines **Artificial Intelligence**, **OCR-based document verification**, **Fully Homomorphic Encryption (FHE)**, and **Blockchain Smart Contracts** to create a secure, transparent, and privacy-first lending ecosystem.
 
 ---
