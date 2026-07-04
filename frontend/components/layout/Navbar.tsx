@@ -4,8 +4,12 @@ import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { connectWallet } from "@/lib/wallet";
+
 
 export default function Navbar() {
+  const [wallet, setWallet] = useState("");
   return (
     <motion.header
       initial={{ y: -60, opacity: 0 }}
@@ -52,10 +56,19 @@ export default function Navbar() {
 
         {/* Button */}
         <Button
-          className="rounded-xl bg-cyan-500 px-6 text-black hover:bg-cyan-400"
-        >
-          Connect Wallet
-        </Button>
+className="rounded-xl bg-cyan-500 px-6 text-black hover:bg-cyan-400"
+onClick={async () => {
+  const address = await connectWallet();
+
+  if(address){
+    setWallet(address);
+  }
+}}
+>
+{wallet
+? `${wallet.slice(0,6)}...${wallet.slice(-4)}`
+: "Connect Wallet"}
+</Button>
       </div>
     </motion.header>
   );

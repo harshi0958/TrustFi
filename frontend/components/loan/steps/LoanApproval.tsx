@@ -1,16 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle, ShieldCheck, BrainCircuit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLoanStore } from "@/store/loanStore";
 import { calculateCredit } from "@/lib/creditEngine";
+import { applyLoan } from "@/lib/api";
 
 export default function LoanApproval() {
   const router = useRouter();
 
-  const { personal, loan } = useLoanStore();
+  const { personal, loan, saveApprovedLoan } = useLoanStore();
 
   const result = useMemo(() => {
 
@@ -31,6 +33,45 @@ export default function LoanApproval() {
     });
 
   }, [personal, loan]);
+
+ useEffect(() => {
+  saveApprovedLoan({
+    amount: loan.amount,
+    emi: result.emi,
+    score: result.score,
+    eligibility: result.eligibility,
+    interestRate: result.interestRate,
+    risk: result.risk,
+    status: result.approved ? "Approved" : "Rejected",
+  });
+}, [loan, result, saveApprovedLoan]);
+
+  const submitLoan = async () => {
+  try {
+    const response = await applyLoan({
+      fullName: personal.fullName,
+      email: personal.email,
+      phone: personal.phone,
+      monthlyIncome: Number(personal.monthlyIncome),
+      loanAmount: loan.amount,
+      loanMonths: loan.months,
+      purpose: loan.purpose,
+      creditScore: result.score,
+    });
+
+    console.log(response);
+
+    alert("Loan Saved Successfully ✅");
+
+    router.push("/dashboard");
+
+  } catch (err) {
+
+    console.error(err);
+
+    alert("Backend Connection Failed");
+  }
+};
 
   return (
     <div className="space-y-8">
@@ -174,13 +215,14 @@ export default function LoanApproval() {
   >
     Download Report
   </Button>
-
   <Button
-    className="bg-cyan-500 text-black hover:bg-cyan-400"
-    onClick={() => router.push("/")}
-  >
-    Back to Dashboard
-  </Button>
+  className="bg-cyan-500 text-black hover:bg-cyan-400"
+  onClick={submitLoan}
+>
+  Save Loan & Go Dashboard
+</Button>
+
+  
 
 </div>
 

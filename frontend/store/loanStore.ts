@@ -19,7 +19,7 @@ interface PersonalDetails {
   monthlyIncome: string;
 }
 
-/* -----------------UPLODDOCUMENT--------------*/
+/* ---------------- DOCUMENTS ---------------- */
 
 interface UploadedDocuments {
   aadhaarFront: boolean;
@@ -29,6 +29,7 @@ interface UploadedDocuments {
   salarySlip: boolean;
   passbook: boolean;
 }
+
 /* ---------------- IDENTITY ---------------- */
 
 interface IdentityDetails {
@@ -56,6 +57,18 @@ interface LoanDetails {
   purpose: string;
 }
 
+/* ---------------- APPROVED LOAN ---------------- */
+
+interface ApprovedLoan {
+  amount: number;
+  emi: number;
+  score: number;
+  eligibility: number;
+  interestRate: number;
+  risk: string;
+  status: string;
+}
+
 /* ---------------- STORE ---------------- */
 
 interface LoanStore {
@@ -66,6 +79,7 @@ interface LoanStore {
   banking: BankingDetails;
   loan: LoanDetails;
   documents: UploadedDocuments;
+  approvedLoan: ApprovedLoan;
 
   setCurrentStep: (step: number) => void;
   nextStep: () => void;
@@ -75,10 +89,13 @@ interface LoanStore {
   updateIdentity: (data: Partial<IdentityDetails>) => void;
   updateBanking: (data: Partial<BankingDetails>) => void;
   updateLoan: (data: Partial<LoanDetails>) => void;
+
   updateDocument: (
-  key: keyof UploadedDocuments,
-  value: boolean
-) => void;
+    key: keyof UploadedDocuments,
+    value: boolean
+  ) => void;
+
+  saveApprovedLoan: (data: ApprovedLoan) => void;
 }
 
 export const useLoanStore = create<LoanStore>((set) => ({
@@ -101,14 +118,16 @@ export const useLoanStore = create<LoanStore>((set) => ({
     monthlyIncome: "",
   },
 
+  /* ---------------- DOCUMENTS ---------------- */
+
   documents: {
-  aadhaarFront: false,
-  aadhaarBack: false,
-  pan: false,
-  selfie: false,
-  salarySlip: false,
-  passbook: false,
-},
+    aadhaarFront: false,
+    aadhaarBack: false,
+    pan: false,
+    selfie: false,
+    salarySlip: false,
+    passbook: false,
+  },
 
   /* ---------------- IDENTITY ---------------- */
 
@@ -137,6 +156,18 @@ export const useLoanStore = create<LoanStore>((set) => ({
     purpose: "",
   },
 
+  /* ---------------- APPROVED LOAN ---------------- */
+
+  approvedLoan: {
+    amount: 0,
+    emi: 0,
+    score: 0,
+    eligibility: 0,
+    interestRate: 0,
+    risk: "",
+    status: "",
+  },
+
   /* ---------------- STEPPER ---------------- */
 
   setCurrentStep: (step) =>
@@ -160,7 +191,7 @@ export const useLoanStore = create<LoanStore>((set) => ({
           : 1,
     })),
 
-  /* ---------------- UPDATE FUNCTIONS ---------------- */
+  /* ---------------- UPDATE ---------------- */
 
   updatePersonal: (data) =>
     set((state) => ({
@@ -201,4 +232,9 @@ export const useLoanStore = create<LoanStore>((set) => ({
         [key]: value,
       },
     })),
+
+  saveApprovedLoan: (data) =>
+    set({
+      approvedLoan: data,
+    }),
 }));

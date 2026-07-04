@@ -1,0 +1,25 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model LoanApplication {
+  id             String   @id @default(cuid())
+  fullName       String
+  email          String
+  phone          String
+  monthlyIncome  Float
+  loanAmount     Float
+  loanMonths     Int
+  purpose        String
+  creditScore    Int
+  eligibility Int @default(0)
+interestRate Float @default(0)
+risk String @default("PENDING")
+status String @default("PENDING")
+  createdAt      DateTime @default(now())
+}

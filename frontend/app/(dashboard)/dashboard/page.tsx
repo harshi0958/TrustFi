@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+
 import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
@@ -11,24 +11,15 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLoanStore } from "@/store/loanStore";
-import { calculateCredit } from "@/lib/creditEngine";
+
 import LoanHistory from "@/components/dashboard/LoanHistory";
 
 export default function DashboardPage() {
   const router = useRouter();
 
-  const { personal, loan } = useLoanStore();
+  const { personal, approvedLoan } = useLoanStore();
 
-  const result = useMemo(() => {
-    return calculateCredit({
-      monthlyIncome: Number(personal.monthlyIncome || 0),
-      loanAmount: loan.amount,
-      months: loan.months,
-      occupation: personal.occupation,
-      documentsVerified: true,
-      bankVerified: true,
-    });
-  }, [personal, loan]);
+  
 
   return (
     <div className="min-h-screen bg-[#050816] p-10">
@@ -68,9 +59,9 @@ export default function DashboardPage() {
           <div>
 
             <h2 className="text-3xl font-bold text-white">
-              {result.approved
-                ? "Loan Approved"
-                : "Loan Rejected"}
+              {approvedLoan.status === "Approved"
+  ? "Loan Approved"
+  : "Loan Rejected"}
             </h2>
 
             <p className="text-zinc-400">
@@ -85,37 +76,37 @@ export default function DashboardPage() {
 
           <Card
             title="Approved Amount"
-            value={`₹ ${loan.amount.toLocaleString()}`}
+            value={`₹ ${approvedLoan.amount.toLocaleString()}`}
             icon={<Wallet className="text-green-400" />}
           />
 
           <Card
             title="Monthly EMI"
-            value={`₹ ${result.emi.toLocaleString()}`}
+            value={`₹ ${approvedLoan.emi.toLocaleString()}`}
             icon={<Wallet className="text-cyan-400" />}
           />
 
           <Card
             title="Credit Score"
-            value={result.score}
+            value={approvedLoan.score}
             icon={<BrainCircuit className="text-cyan-400" />}
           />
 
           <Card
             title="Eligibility"
-            value={`${result.eligibility}%`}
+            value={`${approvedLoan.eligibility}%`}
             icon={<CheckCircle2 className="text-green-400" />}
           />
 
           <Card
             title="Interest Rate"
-            value={`${result.interestRate}%`}
+            value={`${approvedLoan.interestRate}%`}
             icon={<Wallet className="text-yellow-400" />}
           />
 
           <Card
             title="Risk"
-            value={result.risk}
+            value={approvedLoan.risk}
             icon={<AlertTriangle className="text-red-400" />}
           />
 
