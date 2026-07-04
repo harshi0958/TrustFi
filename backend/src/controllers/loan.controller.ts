@@ -60,3 +60,34 @@ export const getLoans = async (req: Request, res: Response) => {
 
   }
 };
+
+export const approveLoan = async (req: Request, res: Response) => {
+  try {
+
+    const { id } = req.params as { id: string };
+
+    const loan = await prisma.loanApplication.update({
+      where: {
+        id,
+      },
+      data: {
+        status: "APPROVED",
+      },
+    });
+
+    res.json({
+      success: true,
+      loan,
+    });
+
+  } catch (error: any) {
+
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+
+  }
+};

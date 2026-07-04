@@ -29,3 +29,10 @@ export async function getLoans() {
 
   return res.json();
 }
+export async function approveLoan(id: string) {
+  const res = await fetch(`${API}/api/loan/approve/${id}`, {
+    method: "PATCH",
+  });
+
+  return res.json();
+}
