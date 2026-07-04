@@ -3,7 +3,7 @@
 ## 🏠 Home Page
 
 <p align="center">
-<img src="images/home.png" width="90%">
+<!-- //<img src="images/home.png" width="90%"> -->
 </p>
 
 **Landing page showcasing TrustFi's AI-powered privacy-preserving lending platform, highlighting secure loan processing using AI, OCR, Blockchain, and Fully Homomorphic Encryption (FHE).**
@@ -13,7 +13,7 @@
 ## 📋 Loan Application
 
 <p align="center">
-<img src="images/loan.png" width="90%">
+<!-- <img src="images/loan.png" width="90%"> -->
 </p>
 
 **Multi-step loan application process with KYC, personal information, document upload, employment verification, and encrypted financial data collection.**
@@ -23,7 +23,7 @@
 ## 📊 User Dashboard
 
 <p align="center">
-<img src="images/dashboard.png" width="90%">
+<!-- <img src="images/dashboard.png" width="90%"> -->
 </p>
 
 **Personalized dashboard displaying AI-generated credit decisions, loan eligibility, repayment information, loan history, and encrypted financial status.**
@@ -33,7 +33,7 @@
 ## 👨‍💼 Admin Dashboard
 
 <p align="center">
-<img src="images/admin.png" width="90%">
+<!-- <img src="images/admin.png" width="90%"> -->
 </p>
 
 **Administrative dashboard for monitoring loan applications, reviewing AI-generated credit decisions, approving or rejecting loan requests, and managing the overall lending workflow securely.**
@@ -101,20 +101,6 @@ Our platform combines:
 
 to enable **secure, intelligent, and privacy-first undercollateralized lending.**
 
----
-# 🌐 Live Links
-
-### 🚀 Live Deployment
-**Visit TrustFi:**  
-👉 https://trust-fi.vercel.app/
-
-> **Note:** The deployment is currently under active development. Core features are available, and additional modules are being integrated.
-
-### 🎨 UI/UX Prototype (Figma)
-**Explore the complete UI design:**  
-👉 https://www.figma.com/make/ANTkuzqloEgTgi8J4AEapx/TrustFi-Fintech-Web-App?code-node-id=0-9&p=f&t=LAp8g6eSpb0StRLT-0&fullscreen=1
-
----
 
 # 📬 Demo
 
