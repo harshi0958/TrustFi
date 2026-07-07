@@ -21,6 +21,14 @@ export default function AdminPage() {
     loadLoans();
   };
 
+  const rejectLoan = async (id: string) => {
+  await fetch(`${API}/api/loan/reject/${id}`, {
+    method: "PATCH",
+  });
+
+  loadLoans();
+};
+
   useEffect(() => {
     loadLoans();
   }, []);
@@ -79,41 +87,61 @@ export default function AdminPage() {
 
                   {loan.status === "APPROVED" ? (
 
-                    <span className="rounded-full bg-green-500/20 px-4 py-2 text-green-400 font-semibold">
-                      ✅ APPROVED
-                    </span>
+<span className="rounded-full bg-green-500/20 px-4 py-2 text-green-400">
+✅ APPROVED
+</span>
 
-                  ) : (
+) : loan.status === "REJECTED" ? (
 
-                    <span className="rounded-full bg-yellow-500/20 px-4 py-2 text-yellow-400 font-semibold">
-                      ⏳ PENDING
-                    </span>
+<span className="rounded-full bg-red-500/20 px-4 py-2 text-red-400">
+❌ REJECTED
+</span>
 
-                  )}
+) : (
+
+<span className="rounded-full bg-yellow-500/20 px-4 py-2 text-yellow-400">
+⏳ PENDING
+</span>
+
+)}
 
                 </td>
 
                 <td className="px-6 py-5 text-center">
 
-                  {loan.status === "PENDING" ? (
+                 {loan.status === "PENDING" ? (
 
-                    <button
-                      onClick={() => approveLoan(loan.id)}
-                      className="rounded-lg bg-green-500 px-5 py-2 font-semibold text-white hover:bg-green-600 transition"
-                    >
-                      Approve
-                    </button>
+<div className="flex justify-center gap-2">
 
-                  ) : (
+<button
+onClick={() => approveLoan(loan.id)}
+className="rounded-lg bg-green-500 px-4 py-2 text-white"
+>
+Approve
+</button>
 
-                    <button
-                      disabled
-                      className="rounded-lg bg-zinc-700 px-5 py-2 text-zinc-300 cursor-not-allowed"
-                    >
-                      Approved
-                    </button>
+<button
+onClick={() => rejectLoan(loan.id)}
+className="rounded-lg bg-red-500 px-4 py-2 text-white"
+>
+Reject
+</button>
 
-                  )}
+</div>
+
+) : loan.status === "APPROVED" ? (
+
+<span className="rounded-full bg-green-500/20 px-4 py-2 text-green-400">
+✅ Approved
+</span>
+
+) : (
+
+<span className="rounded-full bg-red-500/20 px-4 py-2 text-red-400">
+❌ Rejected
+</span>
+
+)}
 
                 </td>
 

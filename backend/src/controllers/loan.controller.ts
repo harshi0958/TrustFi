@@ -61,6 +61,27 @@ export const getLoans = async (req: Request, res: Response) => {
   }
 };
 
+export const getLoanByEmail = async (req: Request, res: Response) => {
+  try {
+    const email: string = String(req.params.email);
+
+    const loan = await prisma.loanApplication.findFirst({
+      where: {
+        email: email,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    res.json(loan);
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
 export const approveLoan = async (req: Request, res: Response) => {
   try {
 
@@ -89,5 +110,31 @@ export const approveLoan = async (req: Request, res: Response) => {
       error: error.message,
     });
 
+  }
+};
+export const rejectLoan = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+
+    const loan = await prisma.loanApplication.update({
+      where: {
+        id,
+      },
+      data: {
+        status: "REJECTED",
+      },
+    });
+
+    res.json({
+      success: true,
+      loan,
+    });
+  } catch (error: any) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 };

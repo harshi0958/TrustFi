@@ -1,21 +1,32 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useWalletStore } from "@/store/walletStore";
 import { connectWallet } from "@/lib/wallet";
 
 
 export default function Navbar() {
-  const [wallet, setWallet] = useState("");
+ const {
+  wallet,
+  connect,
+  loadWallet,
+} = useWalletStore();
+
+useEffect(() => {
+
+  loadWallet();
+
+}, []);
   return (
     <motion.header
       initial={{ y: -60, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.6 }}
-      className="sticky top-0 z-50 border-b border-cyan-500/10 bg-black/60 backdrop-blur-xl"
+      className="sticky top-0 z-50 border-b border-cyan-500/10 bg-background/60 backdrop-blur-xl"
     >
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
         {/* Logo */}
@@ -56,18 +67,18 @@ export default function Navbar() {
 
         {/* Button */}
         <Button
-className="rounded-xl bg-cyan-500 px-6 text-black hover:bg-cyan-400"
-onClick={async () => {
-  const address = await connectWallet();
+  className="rounded-xl bg-cyan-500 px-6 text-black hover:bg-cyan-400"
+  onClick={async () => {
+    const address = await connectWallet();
 
-  if(address){
-    setWallet(address);
-  }
-}}
+    if (address) {
+      connect(address);
+    }
+  }}
 >
-{wallet
-? `${wallet.slice(0,6)}...${wallet.slice(-4)}`
-: "Connect Wallet"}
+  {wallet
+    ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}`
+    : "Connect Wallet"}
 </Button>
       </div>
     </motion.header>

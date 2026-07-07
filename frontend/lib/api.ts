@@ -36,3 +36,8 @@ export async function approveLoan(id: string) {
 
   return res.json();
 }
+export async function getLoanByEmail(email: string) {
+  const res = await fetch(`${API}/api/loan/${email}`);
+
+  return res.json();
+}

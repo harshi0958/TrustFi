@@ -1,6 +1,7 @@
 "use client";
 
-
+import { useEffect } from "react";
+import { useWalletStore } from "@/store/walletStore";
 import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
@@ -11,15 +12,41 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLoanStore } from "@/store/loanStore";
-
+import { getLoanByEmail } from "@/lib/api";
 import LoanHistory from "@/components/dashboard/LoanHistory";
 
 export default function DashboardPage() {
   const router = useRouter();
 
-  const { personal, approvedLoan } = useLoanStore();
+  const {
+  personal,
+  approvedLoan,
+  saveApprovedLoan,
+} = useLoanStore();
 
-  
+  const { connected } = useWalletStore();
+
+useEffect(() => {
+  if (!personal.email) return;
+
+  async function loadLoan() {
+    const loan = await getLoanByEmail(personal.email);
+
+    if (!loan) return;
+
+    saveApprovedLoan({
+      amount: loan.loanAmount,
+      emi: approvedLoan.emi,
+      score: loan.creditScore,
+      eligibility: loan.eligibility,
+      interestRate: loan.interestRate,
+      risk: loan.risk,
+      status: loan.status,
+    });
+  }
+
+  loadLoan();
+}, [personal.email]);
 
   return (
     <div className="min-h-screen bg-[#050816] p-10">
@@ -56,19 +83,33 @@ export default function DashboardPage() {
             className="text-green-400"
           />
 
-          <div>
+          <div className="flex items-center gap-4">
 
-            <h2 className="text-3xl font-bold text-white">
-              {approvedLoan.status === "Approved"
-  ? "Loan Approved"
-  : "Loan Rejected"}
-            </h2>
+  <h2 className="text-3xl font-bold text-white">
+    Loan Status
+  </h2>
 
-            <p className="text-zinc-400">
-              AI Confidential Underwriting Completed
-            </p>
+  {approvedLoan.status === "APPROVED" ? (
 
-          </div>
+    <span className="rounded-full bg-green-500/20 px-4 py-2 text-green-400 font-semibold">
+      ✅ APPROVED
+    </span>
+
+  ) : approvedLoan.status === "REJECTED" ? (
+
+    <span className="rounded-full bg-red-500/20 px-4 py-2 text-red-400 font-semibold">
+      ❌ REJECTED
+    </span>
+
+  ) : (
+
+    <span className="rounded-full bg-yellow-500/20 px-4 py-2 text-yellow-400 font-semibold">
+      ⏳ PENDING
+    </span>
+
+  )}
+
+</div>
 
         </div>
 

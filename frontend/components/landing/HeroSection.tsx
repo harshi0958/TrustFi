@@ -114,7 +114,7 @@ export default function HeroSection() {
                   </h3>
                 </div>
 
-                <div className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 p-5">
+                <div className="rounded-xl bg-linear-to-r from-cyan-500 to-blue-600 p-5">
 
                   <p className="text-sm text-white/80">
                     Eligible Loan Amount

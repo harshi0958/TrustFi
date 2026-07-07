@@ -1,26 +1,56 @@
+"use client";
+
 import { create } from "zustand";
 
-interface WalletState {
-  address: string;
+interface WalletStore {
+  wallet: string;
   connected: boolean;
 
-  setWallet: (address: string) => void;
+  connect: (address: string) => void;
   disconnect: () => void;
+  loadWallet: () => void;
 }
 
-export const useWalletStore = create<WalletState>((set) => ({
-  address: "",
+export const useWalletStore = create<WalletStore>((set) => ({
+
+  wallet: "",
   connected: false,
 
-  setWallet: (address) =>
-    set({
-      address,
-      connected: true,
-    }),
+  connect: (address) => {
 
-  disconnect: () =>
+    localStorage.setItem("wallet", address);
+
     set({
-      address: "",
+      wallet: address,
+      connected: true,
+    });
+
+  },
+
+  disconnect: () => {
+
+    localStorage.removeItem("wallet");
+
+    set({
+      wallet: "",
       connected: false,
-    }),
+    });
+
+  },
+
+  loadWallet: () => {
+
+    const address = localStorage.getItem("wallet");
+
+    if (address) {
+
+      set({
+        wallet: address,
+        connected: true,
+      });
+
+    }
+
+  },
+
 }));

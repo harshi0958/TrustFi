@@ -29,7 +29,7 @@ export default function CTASection() {
       return;
     }
 
-    router.push("/loan");
+    router.push("/dashboard");
   }}
 >
   Apply Loan
