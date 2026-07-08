@@ -27,26 +27,52 @@ export default function DashboardPage() {
   const { connected } = useWalletStore();
 
 useEffect(() => {
-  if (!personal.email) return;
+
+  const email =
+    personal.email ||
+    localStorage.getItem("loanEmail");
+
+  if (!email) return;
+
+  const emailString = email;
 
   async function loadLoan() {
-    const loan = await getLoanByEmail(personal.email);
+
+    const loan = await getLoanByEmail(emailString);
 
     if (!loan) return;
 
+    const amount = loan.loanAmount;
+    const months = loan.loanMonths || 12;
+    const rate = loan.interestRate || 0;
+
+    const monthlyRate = rate / 12 / 100;
+
+    const emi =
+      monthlyRate === 0
+        ? Math.round(amount / months)
+        : Math.round(
+            (amount *
+              monthlyRate *
+              Math.pow(1 + monthlyRate, months)) /
+              (Math.pow(1 + monthlyRate, months) - 1)
+          );
+
     saveApprovedLoan({
-      amount: loan.loanAmount,
-      emi: approvedLoan.emi,
+      amount,
+      emi,
       score: loan.creditScore,
       eligibility: loan.eligibility,
       interestRate: loan.interestRate,
       risk: loan.risk,
       status: loan.status,
     });
+
   }
 
   loadLoan();
-}, [personal.email]);
+
+}, [personal.email, saveApprovedLoan]);
 
   return (
     <div className="min-h-screen bg-[#050816] p-10">

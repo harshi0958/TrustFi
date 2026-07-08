@@ -42,12 +42,14 @@ export default function LoanApproval() {
     eligibility: result.eligibility,
     interestRate: result.interestRate,
     risk: result.risk,
-    status: result.approved ? "Approved" : "Rejected",
+    status: result.approved ? "APPROVED" : "REJECTED",
   });
 }, [loan, result, saveApprovedLoan]);
 
   const submitLoan = async () => {
   try {
+
+    localStorage.setItem("loanEmail", personal.email);
     const response = await applyLoan({
       fullName: personal.fullName,
       email: personal.email,
@@ -58,7 +60,7 @@ export default function LoanApproval() {
       purpose: loan.purpose,
       creditScore: result.score,
     });
-
+    localStorage.setItem("loanEmail", personal.email);
     console.log(response);
 
     alert("Loan Saved Successfully ✅");
