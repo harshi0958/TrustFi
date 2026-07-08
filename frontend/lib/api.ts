@@ -9,7 +9,16 @@ export async function applyLoan(data: any) {
     body: JSON.stringify(data),
   });
 
-  return res.json();
+  const text = await res.text();
+
+  console.log("Status:", res.status);
+  console.log("Response:", text);
+
+  if (!res.ok) {
+    throw new Error(text);
+  }
+
+  return JSON.parse(text);
 }
 
 export async function uploadDocument(file: File) {

@@ -65,12 +65,15 @@ export default function LoanApproval() {
 
     router.push("/dashboard");
 
-  } catch (err) {
+  }  catch (err: any) {
+  console.error("FULL ERROR:", err);
 
-    console.error(err);
-
-    alert("Backend Connection Failed");
+  if (err instanceof Error) {
+    alert(err.message);
+  } else {
+    alert(JSON.stringify(err));
   }
+}
 };
 
   return (
