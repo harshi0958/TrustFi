@@ -67,7 +67,7 @@ export const getLoanByEmail = async (req: Request, res: Response) => {
 
     const loan = await prisma.loanApplication.findFirst({
       where: {
-        email: email,
+        email: email, 
       },
       orderBy: {
         createdAt: "desc",

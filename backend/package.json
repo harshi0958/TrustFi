@@ -4,11 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+  "build": "tsc",
+  "start": "node dist/server.js",
+  "postinstall": "prisma generate"
+},
+
+"prisma": {
+  "schema": "prisma/schema.prisma"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -31,3 +35,4 @@
     "typescript": "^6.0.3"
   }
 }
+
