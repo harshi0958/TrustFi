@@ -4,7 +4,7 @@
 ## 🏠 Home Page
 
 <p align="center">
-<img src="images/home.png" width="90%">
+<!-- <img src="images/home.png" width="90%"> -->
 </p>
 
 **Landing page showcasing TrustFi's AI-powered privacy-preserving lending platform, highlighting secure loan processing using AI, OCR, Blockchain, and Fully Homomorphic Encryption (FHE).**
@@ -14,7 +14,7 @@
 ## 📋 Loan Application
 
 <p align="center">
-<img src="images/loan.png" width="90%">
+<!-- <img src="images/loan.png" width="90%"> -->
 </p>
 
 **Multi-step loan application process with KYC, personal information, document upload, employment verification, and encrypted financial data collection.**
@@ -24,7 +24,7 @@
 ## 📊 User Dashboard
 
 <p align="center">
-<img src="images/dashboard.png" width="90%">
+<!-- <img src="images/dashboard.png" width="90%"> -->
 </p>
 
 **Personalized dashboard displaying AI-generated credit decisions, loan eligibility, repayment information, loan history, and encrypted financial status.**
@@ -34,7 +34,7 @@
 ## 👨‍💼 Admin Dashboard
 
 <p align="center">
-<img src="images/admin.png" width="90%">
+<!-- <img src="images/admin.png" width="90%"> -->
 </p>
 
 **Administrative dashboard for monitoring loan applications, reviewing AI-generated credit decisions, approving or rejecting loan requests, and managing the overall lending workflow securely.**
