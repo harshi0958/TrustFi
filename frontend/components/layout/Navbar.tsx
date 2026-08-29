@@ -16,6 +16,7 @@ export default function Navbar() {
   loadWallet,
 } = useWalletStore();
 
+
 const [mobileOpen, setMobileOpen] = useState(false);
 useEffect(() => {
 
