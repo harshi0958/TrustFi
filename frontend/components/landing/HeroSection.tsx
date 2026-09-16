@@ -47,15 +47,15 @@ export default function HeroSection() {
 
             <div className="mt-10 flex flex-wrap gap-4">
               <Button
-                size="lg"
-                className="rounded-xl bg-cyan-500 px-8 text-black hover:bg-cyan-400"
-                asChild
-              >
-                <Link href="/connect">
-                  Get Started
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
+  size="lg"
+  className="rounded-xl bg-cyan-500 px-8 text-black hover:bg-cyan-400"
+  asChild
+>
+  <Link href="/register">
+    Get Started
+    <ArrowRight className="ml-2 h-5 w-5" />
+  </Link>
+</Button>
 
               {/* <Button
                 size="lg"

@@ -1,159 +1,706 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import AdminSidebar from "@/components/admin/AdminSidebar";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
 export default function AdminPage() {
-  const [loans, setLoans] = useState<any[]>([]);
+  const router = useRouter();
 
-  const loadLoans = async () => {
-    const res = await fetch(`${API}/api/loan`);
-    const data = await res.json();
-    setLoans(data);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // =========================
+  // AUTH CHECK
+  // =========================
+  useEffect(() => {
+    const token = localStorage.getItem("adminToken");
+
+    if (!token) {
+      router.replace("/admin/login");
+      return;
+    }
+
+    setIsAuthenticated(true);
+    setIsCheckingAuth(false);
+  }, [router]);
+
+  // =========================
+  // LOAD DASHBOARD
+  // =========================
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+
+      const res = await fetch(`${API}/api/admin/dashboard`);
+
+      if (!res.ok) {
+        throw new Error("Failed to load dashboard");
+      }
+
+      const data = await res.json();
+
+      setDashboard(data);
+    } catch (error) {
+      console.error("Dashboard error:", error);
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const approveLoan = async (id: string) => {
-    await fetch(`${API}/api/loan/approve/${id}`, {
-      method: "PATCH",
-    });
-
-    loadLoans();
-  };
-
-  const rejectLoan = async (id: string) => {
-  await fetch(`${API}/api/loan/reject/${id}`, {
-    method: "PATCH",
-  });
-
-  loadLoans();
-};
 
   useEffect(() => {
-    loadLoans();
-  }, []);
+    if (isAuthenticated) {
+      loadDashboard();
+    }
+  }, [isAuthenticated]);
 
+  // =========================
+  // APPROVE
+  // =========================
+  const approveLoan = async (id: string) => {
+    try {
+      await fetch(`${API}/api/loan/approve/${id}`, {
+        method: "PATCH",
+      });
+
+      loadDashboard();
+    } catch (error) {
+      console.error("Approve error:", error);
+    }
+  };
+
+  // =========================
+  // REJECT
+  // =========================
+  const rejectLoan = async (id: string) => {
+    try {
+      await fetch(`${API}/api/loan/reject/${id}`, {
+        method: "PATCH",
+      });
+
+      loadDashboard();
+    } catch (error) {
+      console.error("Reject error:", error);
+    }
+  };
+
+  // =========================
+  // LOGOUT
+  // =========================
+  const logout = () => {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminEmail");
+    localStorage.removeItem("adminName");
+
+    router.replace("/admin/login");
+  };
+
+  // =========================
+  // AUTH LOADING
+  // =========================
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-[#050816] flex items-center justify-center text-white">
+        <div className="text-center">
+          <div className="text-5xl mb-4 animate-pulse">
+            🔐
+          </div>
+
+          <p className="text-gray-400">
+            Checking admin authentication...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  // =========================
+  // DASHBOARD LOADING
+  // =========================
+  if (loading || !dashboard) {
+    return (
+      <div className="min-h-screen bg-[#050816] flex items-center justify-center text-white">
+        <div className="text-center">
+          <div className="text-5xl mb-4 animate-pulse">
+            📊
+          </div>
+
+          <p className="text-gray-400">
+            Loading TrustFi Admin Dashboard...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = dashboard.statistics;
+  const loanTypes = dashboard.loanTypes;
+  const recentApplications = dashboard.recentApplications;
+
+  // =========================
+  // DASHBOARD
+  // =========================
   return (
-    <div className="min-h-screen bg-[#050816] p-10 text-white">
+    <div className="min-h-screen bg-[#050816] text-white">
+        <AdminSidebar />
+          <div className="ml-64">
+      {/* ================= HEADER ================= */}
+      <header className="border-b border-white/10 bg-[#080b1d]/80 backdrop-blur-xl">
 
-      <h1 className="text-5xl font-bold text-center mb-10">
-        👨‍💼 Admin Dashboard
-      </h1>
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
 
-      <div className="overflow-x-auto rounded-2xl border border-cyan-500/20 bg-zinc-900 shadow-xl">
+          <div>
+            <h1 className="text-2xl font-bold">
+              <span className="text-cyan-400">
+                Trust
+              </span>
+              Fi
+              <span className="text-gray-500 text-sm ml-3">
+                ADMIN
+              </span>
+            </h1>
 
-        <table className="min-w-full">
+            <p className="text-xs text-gray-500 mt-1">
+              Lending Management Platform
+            </p>
+          </div>
 
-          <thead className="bg-cyan-500/10">
+          <div className="flex items-center gap-4">
 
-            <tr>
+            <div className="hidden sm:block text-right">
+              <p className="text-sm font-semibold">
+                {localStorage.getItem("adminName") || "Admin"}
+              </p>
 
-              <th className="px-6 py-4 text-left">Applicant</th>
+              <p className="text-xs text-gray-500">
+                Administrator
+              </p>
+            </div>
 
-              <th className="px-6 py-4 text-center">Loan Amount</th>
+            
 
-              <th className="px-6 py-4 text-center">Credit Score</th>
+          </div>
 
-              <th className="px-6 py-4 text-center">Status</th>
+        </div>
 
-              <th className="px-6 py-4 text-center">Action</th>
+      </header>
 
-            </tr>
+      {/* ================= MAIN ================= */}
+      <main className="max-w-7xl mx-auto px-6 py-10">
 
-          </thead>
+        {/* TITLE */}
 
-          <tbody>
+        <div className="mb-8">
 
-            {loans.map((loan: any) => (
+          <h2 className="text-4xl font-bold">
+            Dashboard
+          </h2>
 
-              <tr
-                key={loan.id}
-                className="border-t border-white/10 hover:bg-cyan-500/5 transition"
-              >
+          <p className="text-gray-400 mt-2">
+            Monitor TrustFi lending activity and loan applications.
+          </p>
 
-                <td className="px-6 py-5 font-semibold">
-                  {loan.fullName}
-                </td>
+        </div>
 
-                <td className="px-6 py-5 text-center text-cyan-400 font-bold">
-                  ₹ {loan.loanAmount.toLocaleString()}
-                </td>
 
-                <td className="px-6 py-5 text-center">
-                  {loan.creditScore}
-                </td>
+        {/* ================= STATS ================= */}
 
-                <td className="px-6 py-5 text-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
 
-                  {loan.status === "APPROVED" ? (
+          {/* USERS */}
+          <StatCard
+            icon="👥"
+            title="Total Users"
+            value={stats.totalUsers}
+            description="Unique applicants"
+          />
 
-<span className="rounded-full bg-green-500/20 px-4 py-2 text-green-400">
-✅ APPROVED
-</span>
+          {/* LOANS */}
+          <StatCard
+            icon="📋"
+            title="Total Applications"
+            value={stats.totalLoans}
+            description="Loan applications"
+          />
 
-) : loan.status === "REJECTED" ? (
+          {/* AMOUNT */}
+          <StatCard
+            icon="💰"
+            title="Total Loan Amount"
+            value={`₹${(stats.totalLoanAmount / 100000).toFixed(1)}L`}
+            description="Requested amount"
+          />
 
-<span className="rounded-full bg-red-500/20 px-4 py-2 text-red-400">
-❌ REJECTED
-</span>
+          {/* APPROVED */}
+          <StatCard
+            icon="✅"
+            title="Approved Loans"
+            value={stats.approvedLoans}
+            description="Successfully approved"
+          />
 
-) : (
+          {/* PENDING */}
+          <StatCard
+            icon="⏳"
+            title="Pending Loans"
+            value={stats.pendingLoans}
+            description="Waiting for approval"
+          />
 
-<span className="rounded-full bg-yellow-500/20 px-4 py-2 text-yellow-400">
-⏳ PENDING
-</span>
+          {/* REJECTED */}
+          <StatCard
+            icon="❌"
+            title="Rejected Loans"
+            value={stats.rejectedLoans}
+            description="Rejected applications"
+          />
 
-)}
+        </div>
 
-                </td>
 
-                <td className="px-6 py-5 text-center">
+        {/* ================= ANALYTICS ================= */}
 
-                 {loan.status === "PENDING" ? (
+        <div className="grid lg:grid-cols-2 gap-6 mb-10">
 
-<div className="flex justify-center gap-2">
+          {/* LOAN TYPES */}
 
-<button
-onClick={() => approveLoan(loan.id)}
-className="rounded-lg bg-green-500 px-4 py-2 text-white"
->
-Approve
-</button>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
 
-<button
-onClick={() => rejectLoan(loan.id)}
-className="rounded-lg bg-red-500 px-4 py-2 text-white"
->
-Reject
-</button>
+            <div className="mb-6">
 
-</div>
+              <h3 className="text-xl font-bold">
+                Loan Distribution
+              </h3>
 
-) : loan.status === "APPROVED" ? (
+              <p className="text-sm text-gray-500">
+                Applications by loan type
+              </p>
 
-<span className="rounded-full bg-green-500/20 px-4 py-2 text-green-400">
-✅ Approved
-</span>
+            </div>
 
-) : (
+            <LoanTypeRow
+              icon="👤"
+              name="Personal Loan"
+              count={loanTypes.personal.count}
+              amount={loanTypes.personal.amount}
+            />
 
-<span className="rounded-full bg-red-500/20 px-4 py-2 text-red-400">
-❌ Rejected
-</span>
+            <LoanTypeRow
+              icon="🏠"
+              name="Property Loan"
+              count={loanTypes.property.count}
+              amount={loanTypes.property.amount}
+            />
 
-)}
+            <LoanTypeRow
+              icon="🪙"
+              name="Gold Loan"
+              count={loanTypes.gold.count}
+              amount={loanTypes.gold.amount}
+            />
 
-                </td>
+          </div>
 
-              </tr>
 
-            ))}
+          {/* APPLICATION STATUS */}
 
-          </tbody>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
 
-        </table>
+            <div className="mb-6">
+
+              <h3 className="text-xl font-bold">
+                Application Status
+              </h3>
+
+              <p className="text-sm text-gray-500">
+                Current loan application status
+              </p>
+
+            </div>
+
+            <StatusRow
+              label="Approved"
+              count={stats.approvedLoans}
+            />
+
+            <StatusRow
+              label="Pending"
+              count={stats.pendingLoans}
+            />
+
+            <StatusRow
+              label="Rejected"
+              count={stats.rejectedLoans}
+            />
+
+            <div className="mt-6 pt-5 border-t border-white/10 flex justify-between">
+
+              <span className="text-gray-400">
+                Total Applications
+              </span>
+
+              <span className="font-bold">
+                {stats.totalLoans}
+              </span>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        {/* ================= RECENT APPLICATIONS ================= */}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+
+          <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+
+            <div>
+
+              <h3 className="text-xl font-bold">
+                Recent Applications
+              </h3>
+
+              <p className="text-sm text-gray-500 mt-1">
+                Latest loan applications
+              </p>
+
+            </div>
+
+            <button
+              onClick={loadDashboard}
+              className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-400 hover:bg-cyan-500/20 transition"
+            >
+              ↻ Refresh
+            </button>
+
+          </div>
+
+
+          <div className="overflow-x-auto">
+
+            <table className="min-w-full">
+
+              <thead className="bg-white/[0.03]">
+
+                <tr>
+
+                  <th className="px-6 py-4 text-left text-xs uppercase tracking-wider text-gray-500">
+                    Applicant
+                  </th>
+
+                  <th className="px-6 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+                    Loan Type
+                  </th>
+
+                  <th className="px-6 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+                    Amount
+                  </th>
+
+                  <th className="px-6 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+                    Credit Score
+                  </th>
+
+                  <th className="px-6 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+                    Risk
+                  </th>
+
+                  <th className="px-6 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+                    Status
+                  </th>
+
+                  <th className="px-6 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+                    Action
+                  </th>
+
+                </tr>
+
+              </thead>
+
+
+              <tbody>
+
+                {recentApplications.map((loan: any) => (
+
+                  <tr
+                    key={loan.id}
+                    className="border-t border-white/10 hover:bg-cyan-500/[0.03] transition"
+                  >
+
+                    {/* APPLICANT */}
+
+                    <td className="px-6 py-5">
+
+                      <div className="font-semibold">
+                        {loan.fullName}
+                      </div>
+
+                      <div className="text-xs text-gray-500 mt-1">
+                        {loan.email}
+                      </div>
+
+                    </td>
+
+
+                    {/* TYPE */}
+
+                    <td className="px-6 py-5 text-center">
+
+                      <span className="rounded-lg bg-cyan-500/10 border border-cyan-500/20 px-3 py-1.5 text-xs text-cyan-400">
+                        {loan.loanType}
+                      </span>
+
+                    </td>
+
+
+                    {/* AMOUNT */}
+
+                    <td className="px-6 py-5 text-center font-semibold">
+                      ₹{loan.loanAmount.toLocaleString("en-IN")}
+                    </td>
+
+
+                    {/* CREDIT */}
+
+                    <td className="px-6 py-5 text-center">
+
+                      <span className="font-bold text-cyan-400">
+                        {loan.creditScore}
+                      </span>
+
+                    </td>
+
+
+                    {/* RISK */}
+
+                    <td className="px-6 py-5 text-center">
+
+                      <span
+                        className={`rounded-full px-3 py-1.5 text-xs ${
+                          loan.risk === "LOW"
+                            ? "bg-green-500/10 text-green-400"
+                            : loan.risk === "MEDIUM"
+                            ? "bg-yellow-500/10 text-yellow-400"
+                            : "bg-red-500/10 text-red-400"
+                        }`}
+                      >
+                        {loan.risk}
+                      </span>
+
+                    </td>
+
+
+                    {/* STATUS */}
+
+                    <td className="px-6 py-5 text-center">
+
+                      {loan.status === "APPROVED" ? (
+
+                        <span className="text-green-400 text-sm">
+                          ✅ Approved
+                        </span>
+
+                      ) : loan.status === "REJECTED" ? (
+
+                        <span className="text-red-400 text-sm">
+                          ❌ Rejected
+                        </span>
+
+                      ) : (
+
+                        <span className="text-yellow-400 text-sm">
+                          ⏳ Pending
+                        </span>
+
+                      )}
+
+                    </td>
+
+
+                    {/* ACTION */}
+
+                    <td className="px-6 py-5 text-center">
+
+                      {loan.status === "PENDING" && (
+
+                        <div className="flex justify-center gap-2">
+
+                          <button
+                            onClick={() => approveLoan(loan.id)}
+                            className="rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2 text-xs text-green-400 hover:bg-green-500 hover:text-white transition"
+                          >
+                            Approve
+                          </button>
+
+                          <button
+                            onClick={() => rejectLoan(loan.id)}
+                            className="rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs text-red-400 hover:bg-red-500 hover:text-white transition"
+                          >
+                            Reject
+                          </button>
+
+                        </div>
+
+                      )}
+
+                      {loan.status === "APPROVED" && (
+                        <span className="text-xs text-green-400">
+                          Approved
+                        </span>
+                      )}
+
+                      {loan.status === "REJECTED" && (
+                        <span className="text-xs text-red-400">
+                          Rejected
+                        </span>
+                      )}
+
+                    </td>
+
+                  </tr>
+
+                ))}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+        </div>
+
+      </main>
+    </div>
+    </div>
+  );
+}
+
+
+/* =========================================================
+   STAT CARD
+========================================================= */
+
+function StatCard({
+  icon,
+  title,
+  value,
+  description,
+}: {
+  icon: string;
+  title: string;
+  value: string | number;
+  description: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 hover:border-cyan-500/30 transition">
+
+      <div className="flex items-start justify-between">
+
+        <div>
+
+          <p className="text-sm text-gray-500">
+            {title}
+          </p>
+
+          <p className="text-3xl font-bold mt-2">
+            {value}
+          </p>
+
+          <p className="text-xs text-gray-600 mt-2">
+            {description}
+          </p>
+
+        </div>
+
+        <div className="text-3xl">
+          {icon}
+        </div>
 
       </div>
+
+    </div>
+  );
+}
+
+
+/* =========================================================
+   LOAN TYPE ROW
+========================================================= */
+
+function LoanTypeRow({
+  icon,
+  name,
+  count,
+  amount,
+}: {
+  icon: string;
+  name: string;
+  count: number;
+  amount: number;
+}) {
+  return (
+    <div className="flex items-center justify-between py-4 border-b border-white/10 last:border-0">
+
+      <div className="flex items-center gap-3">
+
+        <div className="text-2xl">
+          {icon}
+        </div>
+
+        <div>
+
+          <p className="font-medium">
+            {name}
+          </p>
+
+          <p className="text-xs text-gray-500">
+            {count} applications
+          </p>
+
+        </div>
+
+      </div>
+
+      <p className="font-semibold text-cyan-400">
+        ₹{amount.toLocaleString("en-IN")}
+      </p>
+
+    </div>
+  );
+}
+
+
+/* =========================================================
+   STATUS ROW
+========================================================= */
+
+function StatusRow({
+  label,
+  count,
+}: {
+  label: string;
+  count: number;
+}) {
+  return (
+    <div className="flex items-center justify-between py-4 border-b border-white/10">
+
+      <span className="text-gray-300">
+        {label}
+      </span>
+
+      <span className="font-bold text-lg">
+        {count}
+      </span>
 
     </div>
   );

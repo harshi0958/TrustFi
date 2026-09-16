@@ -1,9 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
-import { useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, ShieldCheck, BrainCircuit } from "lucide-react";
+import {
+  CheckCircle,
+  ShieldCheck,
+  BrainCircuit,
+  Loader2,
+} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { useLoanStore } from "@/store/loanStore";
 import { calculateCredit } from "@/lib/creditEngine";
@@ -12,74 +17,400 @@ import { applyLoan } from "@/lib/api";
 export default function LoanApproval() {
   const router = useRouter();
 
-  const { personal, loan, saveApprovedLoan } = useLoanStore();
+  const {
+    personal,
+    loan,
+    documents,
+    saveApprovedLoan,
+  } = useLoanStore();
+
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
+
+  /*
+   * -----------------------------------------
+   * DOCUMENT VERIFICATION STATUS
+   * -----------------------------------------
+   */
+
+  const documentsVerified =
+    Boolean(
+      documents.aadhaarFront &&
+        documents.aadhaarBack &&
+        documents.pan &&
+        documents.selfie &&
+        documents.salarySlip &&
+        documents.passbook
+    );
+
+  const bankVerified =
+    Boolean(documents.passbook);
+
+  /*
+   * -----------------------------------------
+   * AI CREDIT RESULT
+   * -----------------------------------------
+   *
+   * This is used for the final approval
+   * summary shown on this page.
+   */
 
   const result = useMemo(() => {
-
     return calculateCredit({
-
-      monthlyIncome: Number(personal.monthlyIncome),
+      monthlyIncome: Number(
+        personal.monthlyIncome || 0
+      ),
 
       loanAmount: loan.amount,
 
       months: loan.months,
 
-      occupation: personal.occupation,
+      occupation:
+        personal.occupation || "",
 
-      documentsVerified: true,
+      documentsVerified,
 
-      bankVerified: true,
-
+      bankVerified,
     });
+  }, [
+    personal.monthlyIncome,
+    personal.occupation,
+    loan.amount,
+    loan.months,
+    documentsVerified,
+    bankVerified,
+  ]);
 
-  }, [personal, loan]);
+  /*
+   * -----------------------------------------
+   * SAVE APPROVED LOAN RESULT TO ZUSTAND
+   * -----------------------------------------
+   */
 
- useEffect(() => {
-  saveApprovedLoan({
-    amount: loan.amount,
-    emi: result.emi,
-    score: result.score,
-    eligibility: result.eligibility,
-    interestRate: result.interestRate,
-    risk: result.risk,
-    status: result.approved ? "APPROVED" : "REJECTED",
-  });
-}, [loan, result, saveApprovedLoan]);
+  useEffect(() => {
+    saveApprovedLoan({
+      amount: loan.amount,
+      emi: result.emi,
+      score: result.score,
+      eligibility: result.eligibility,
+      interestRate: result.interestRate,
+      risk: result.risk,
+      status: result.approved
+        ? "APPROVED"
+        : "REJECTED",
+    });
+  }, [
+    loan.amount,
+    result,
+    saveApprovedLoan,
+  ]);
+
+  /*
+   * -----------------------------------------
+   * SUBMIT LOAN
+   * -----------------------------------------
+   */
 
   const submitLoan = async () => {
-  try {
+    /*
+     * Prevent double submission.
+     */
 
-    localStorage.setItem("loanEmail", personal.email);
-    const response = await applyLoan({
-      fullName: personal.fullName,
-      email: personal.email,
-      phone: personal.phone,
-      monthlyIncome: Number(personal.monthlyIncome),
-      loanAmount: loan.amount,
-      loanMonths: loan.months,
-      purpose: loan.purpose,
-      creditScore: result.score,
-    });
-    localStorage.setItem("loanEmail", personal.email);
-    console.log(response);
+    if (isSubmitting) {
+      return;
+    }
 
-    alert("Loan Saved Successfully ✅");
+    /*
+     * -----------------------------------------
+     * BASIC VALIDATION
+     * -----------------------------------------
+     */
 
-    router.push("/dashboard");
+    if (!personal.fullName) {
+      alert("Applicant name is missing.");
+      return;
+    }
 
-  }  catch (err: any) {
-  console.error("FULL ERROR:", err);
+    if (!personal.email) {
+      alert("Email is missing.");
+      return;
+    }
 
-  if (err instanceof Error) {
-    alert(err.message);
-  } else {
-    alert(JSON.stringify(err));
-  }
-}
-};
+    if (!personal.phone) {
+      alert("Phone number is missing.");
+      return;
+    }
+
+    if (!personal.monthlyIncome) {
+      alert("Monthly income is missing.");
+      return;
+    }
+
+    if (!personal.occupation) {
+      alert("Occupation is missing.");
+      return;
+    }
+
+    if (!loan.loanType) {
+      alert("Loan type is missing.");
+      return;
+    }
+
+    if (!loan.amount || loan.amount <= 0) {
+      alert("Loan amount is invalid.");
+      return;
+    }
+
+    if (!loan.months || loan.months <= 0) {
+      alert("Loan tenure is invalid.");
+      return;
+    }
+
+    if (!loan.purpose) {
+      alert("Please provide the loan purpose.");
+      return;
+    }
+
+    /*
+     * All required documents should be verified
+     * before submitting the application.
+     */
+
+    if (!documentsVerified) {
+      alert(
+        "Please complete all required document verification before submitting."
+      );
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      /*
+       * Store email so dashboard can fetch
+       * the latest loan application.
+       */
+
+      localStorage.setItem(
+        "loanEmail",
+        personal.email
+      );
+
+      /*
+       * -----------------------------------------
+       * FINAL LOAN APPLICATION PAYLOAD
+       * -----------------------------------------
+       *
+       * These fields match the backend
+       * /api/loan/apply requirements.
+       */
+
+      const loanPayload = {
+        fullName: personal.fullName,
+
+        email: personal.email,
+
+        phone: personal.phone,
+
+        monthlyIncome: Number(
+          personal.monthlyIncome
+        ),
+
+        /*
+         * IMPORTANT:
+         * Previously missing.
+         */
+
+        loanType: loan.loanType,
+
+        loanAmount: Number(
+          loan.amount
+        ),
+
+        loanMonths: Number(
+          loan.months
+        ),
+
+        purpose: loan.purpose,
+
+        
+
+        // =========================
+        // PROPERTY LOAN DETAILS
+        // =========================
+
+        propertyType:
+          loan.loanType === "PROPERTY"
+            ? loan.propertyType
+            : null,
+
+        propertyValue:
+          loan.loanType === "PROPERTY"
+            ? Number(loan.propertyValue || 0)
+            : null,
+
+        propertyAddress:
+          loan.loanType === "PROPERTY"
+            ? loan.propertyAddress
+            : null,
+
+        ownershipStatus:
+          loan.loanType === "PROPERTY"
+            ? loan.ownershipStatus
+            : null,
+
+        // =========================
+        // GOLD LOAN DETAILS
+        // =========================
+
+        goldWeight:
+          loan.loanType === "GOLD"
+            ? Number(loan.goldWeight || 0)
+            : null,
+
+        goldPurity:
+          loan.loanType === "GOLD"
+            ? loan.goldPurity
+            : null,
+
+        goldValue:
+          loan.loanType === "GOLD"
+            ? Number(loan.goldValue || 0)
+            : null,
+
+        goldOwnership:
+          loan.loanType === "GOLD"
+            ? loan.goldOwnership
+            : null,
+
+        creditScore: Number(
+          result.score || 0
+        ),
+
+        /*
+         * IMPORTANT:
+         * Previously missing.
+         */
+
+        occupation:
+          personal.occupation,
+
+        /*
+         * IMPORTANT:
+         * Previously missing.
+         */
+
+        documentsVerified:
+          documentsVerified,
+
+        /*
+         * IMPORTANT:
+         * Previously missing.
+         */
+
+        bankVerified:
+          bankVerified,
+      };
+
+      console.log(
+        "================================="
+      );
+
+      console.log(
+        "FINAL LOAN APPLICATION PAYLOAD:"
+      );
+
+      console.log(
+        loanPayload
+      );
+
+      console.log(
+        "================================="
+      );
+
+      
+      /*
+       * -----------------------------------------
+       * API CALL
+       * -----------------------------------------
+       */
+
+      const response =
+        await applyLoan(
+          loanPayload
+        );
+
+      console.log(
+        "Loan Application Response:",
+        response
+      );
+
+      /*
+       * Store email again after successful
+       * application submission.
+       */
+
+      localStorage.setItem(
+        "loanEmail",
+        personal.email
+      );
+
+      /*
+       * -----------------------------------------
+       * SUCCESS
+       * -----------------------------------------
+       */
+
+      alert(
+        "Loan Saved Successfully ✅"
+      );
+
+      /*
+       * Go to dashboard.
+       */
+
+      router.push(
+        "/dashboard"
+      );
+
+    } catch (err: any) {
+      console.error(
+        "FULL LOAN SUBMISSION ERROR:",
+        err
+      );
+
+      /*
+       * Show readable error.
+       */
+
+      if (err instanceof Error) {
+        alert(
+          err.message ||
+            "Loan submission failed."
+        );
+      } else {
+        alert(
+          JSON.stringify(err)
+        );
+      }
+
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /*
+   * -----------------------------------------
+   * RETURN UI
+   * -----------------------------------------
+   */
 
   return (
     <div className="space-y-8">
+
+      {/* ---------------------------------- */}
+      {/* HEADER */}
+      {/* ---------------------------------- */}
 
       <div className="text-center">
 
@@ -105,12 +436,19 @@ export default function LoanApproval() {
 
       </div>
 
+      {/* ---------------------------------- */}
+      {/* AI RESULT CARDS */}
+      {/* ---------------------------------- */}
+
       <div className="grid grid-cols-2 gap-5">
 
         <Card
-  title="Applicant"
-  value={personal.fullName}
-/>
+          title="Applicant"
+          value={
+            personal.fullName ||
+            "Applicant"
+          }
+        />
 
         <Card
           title="AI Credit Score"
@@ -129,12 +467,16 @@ export default function LoanApproval() {
 
         <Card
           title="Monthly EMI"
-          value={`₹ ${result.emi.toLocaleString()}`}
+          value={`₹ ${result.emi.toLocaleString(
+            "en-IN"
+          )}`}
         />
 
         <Card
           title="Approved Amount"
-          value={`₹ ${loan.amount.toLocaleString()}`}
+          value={`₹ ${loan.amount.toLocaleString(
+            "en-IN"
+          )}`}
         />
 
         <Card
@@ -143,17 +485,23 @@ export default function LoanApproval() {
         />
 
         <Card
-  title="AI Confidence"
-  value="98%"
-/>
+          title="AI Confidence"
+          value="98%"
+        />
 
       </div>
+
+      {/* ---------------------------------- */}
+      {/* AI DECISION SUMMARY */}
+      {/* ---------------------------------- */}
 
       <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-6">
 
         <div className="flex items-center gap-3">
 
-          <BrainCircuit className="text-cyan-400" />
+          <BrainCircuit
+            className="text-cyan-400"
+          />
 
           <h2 className="text-xl font-bold text-cyan-300">
 
@@ -165,31 +513,76 @@ export default function LoanApproval() {
 
         <ul className="mt-5 space-y-3 text-zinc-300">
 
-          <li>✅ Aadhaar Verified</li>
+          <li>
+            {documents.aadhaarFront &&
+            documents.aadhaarBack
+              ? "✅"
+              : "⚠️"}{" "}
+            Aadhaar Verified
+          </li>
 
-          <li>✅ PAN Verified</li>
+          <li>
+            {documents.pan
+              ? "✅"
+              : "⚠️"}{" "}
+            PAN Verified
+          </li>
 
-          <li>✅ Salary Verified</li>
+          <li>
+            {documents.salarySlip
+              ? "✅"
+              : "⚠️"}{" "}
+            Salary Verified
+          </li>
 
-          <li>✅ Bank Account Verified</li>
+          <li>
+            {documents.passbook
+              ? "✅"
+              : "⚠️"}{" "}
+            Bank Account Verified
+          </li>
 
-          <li>✅ OCR Extraction Completed</li>
+          <li>
+            {documentsVerified
+              ? "✅"
+              : "⚠️"}{" "}
+            OCR Extraction Completed
+          </li>
 
-          <li>✅ Repayment Capacity Analysed</li>
+          <li>
+            {result.emi > 0
+              ? "✅"
+              : "⚠️"}{" "}
+            Repayment Capacity Analysed
+          </li>
 
-          <li>✅ AI Risk Prediction Completed</li>
+          <li>
+            {result.score > 0
+              ? "✅"
+              : "⚠️"}{" "}
+            AI Risk Prediction Completed
+          </li>
 
-          <li>✅ Fully Homomorphic Encryption Enabled</li>
+          <li>
+            {"✅"} Fully Homomorphic Encryption
+            Enabled
+          </li>
 
         </ul>
 
       </div>
 
+      {/* ---------------------------------- */}
+      {/* PRIVACY */}
+      {/* ---------------------------------- */}
+
       <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-5">
 
         <div className="flex items-center gap-3">
 
-          <ShieldCheck className="text-green-400" />
+          <ShieldCheck
+            className="text-green-400"
+          />
 
           <div>
 
@@ -201,8 +594,9 @@ export default function LoanApproval() {
 
             <p className="text-zinc-300">
 
-              Sensitive financial data remained encrypted
-              during AI computation using FHE.
+              Sensitive financial data remained
+              encrypted during AI computation using
+              FHE.
 
             </p>
 
@@ -212,28 +606,59 @@ export default function LoanApproval() {
 
       </div>
 
+      {/* ---------------------------------- */}
+      {/* FINAL ACTIONS */}
+      {/* ---------------------------------- */}
+
       <div className="flex justify-center gap-4">
 
-  <Button
-    variant="outline"
-    onClick={() => window.print()}
-  >
-    Download Report
-  </Button>
-  <Button
-  className="bg-cyan-500 text-black hover:bg-cyan-400"
-  onClick={submitLoan}
->
-  Save Loan & Go Dashboard
-</Button>
+        <Button
+          variant="outline"
+          onClick={() =>
+            window.print()
+          }
+          disabled={isSubmitting}
+        >
+          Download Report
+        </Button>
 
-  
+        <Button
+          className="bg-cyan-500 text-black hover:bg-cyan-400"
+          onClick={submitLoan}
+          disabled={
+            isSubmitting ||
+            !documentsVerified
+          }
+        >
 
-</div>
+          {isSubmitting ? (
+            <span className="flex items-center gap-2">
+
+              <Loader2
+                size={18}
+                className="animate-spin"
+              />
+
+              Saving Loan...
+
+            </span>
+          ) : (
+            "Save Loan & Go Dashboard"
+          )}
+
+        </Button>
+
+      </div>
 
     </div>
   );
 }
+
+/*
+ * -----------------------------------------
+ * CARD COMPONENT
+ * -----------------------------------------
+ */
 
 function Card({
   title,

@@ -28,6 +28,10 @@ interface UploadedDocuments {
   selfie: boolean;
   salarySlip: boolean;
   passbook: boolean;
+
+  // Loan-specific documents
+  propertyDocument: boolean;
+  goldDocument: boolean;
 }
 
 /* ---------------- IDENTITY ---------------- */
@@ -51,10 +55,25 @@ interface BankingDetails {
 
 /* ---------------- LOAN ---------------- */
 
+export type LoanType = "PERSONAL" | "PROPERTY" | "GOLD";
+
 interface LoanDetails {
+  loanType: LoanType;
   amount: number;
   months: number;
   purpose: string;
+
+  // Property Loan
+  propertyType: string;
+  propertyValue: number;
+  propertyAddress: string;
+  ownershipStatus: string;
+
+  // Gold Loan
+  goldWeight: number;
+  goldPurity: string;
+  goldValue: number;
+  goldOwnership: string;
 }
 
 /* ---------------- APPROVED LOAN ---------------- */
@@ -127,6 +146,10 @@ export const useLoanStore = create<LoanStore>((set) => ({
     selfie: false,
     salarySlip: false,
     passbook: false,
+
+    // Loan-specific documents
+    propertyDocument: false,
+    goldDocument: false,
   },
 
   /* ---------------- IDENTITY ---------------- */
@@ -150,11 +173,24 @@ export const useLoanStore = create<LoanStore>((set) => ({
 
   /* ---------------- LOAN ---------------- */
 
-  loan: {
-    amount: 500000,
-    months: 24,
-    purpose: "",
-  },
+loan: {
+  loanType: "PERSONAL",
+  amount: 500000,
+  months: 24,
+  purpose: "",
+
+  // Property Loan
+  propertyType: "",
+  propertyValue: 0,
+  propertyAddress: "",
+  ownershipStatus: "",
+
+  // Gold Loan
+  goldWeight: 0,
+  goldPurity: "",
+  goldValue: 0,
+  goldOwnership: "",
+},
 
   /* ---------------- APPROVED LOAN ---------------- */
 
@@ -191,7 +227,7 @@ export const useLoanStore = create<LoanStore>((set) => ({
           : 1,
     })),
 
-  /* ---------------- UPDATE ---------------- */
+  /* ---------------- UPDATE PERSONAL ---------------- */
 
   updatePersonal: (data) =>
     set((state) => ({
@@ -201,6 +237,8 @@ export const useLoanStore = create<LoanStore>((set) => ({
       },
     })),
 
+  /* ---------------- UPDATE IDENTITY ---------------- */
+
   updateIdentity: (data) =>
     set((state) => ({
       identity: {
@@ -208,6 +246,8 @@ export const useLoanStore = create<LoanStore>((set) => ({
         ...data,
       },
     })),
+
+  /* ---------------- UPDATE BANKING ---------------- */
 
   updateBanking: (data) =>
     set((state) => ({
@@ -217,6 +257,8 @@ export const useLoanStore = create<LoanStore>((set) => ({
       },
     })),
 
+  /* ---------------- UPDATE LOAN ---------------- */
+
   updateLoan: (data) =>
     set((state) => ({
       loan: {
@@ -225,6 +267,8 @@ export const useLoanStore = create<LoanStore>((set) => ({
       },
     })),
 
+  /* ---------------- UPDATE DOCUMENT ---------------- */
+
   updateDocument: (key, value) =>
     set((state) => ({
       documents: {
@@ -232,6 +276,8 @@ export const useLoanStore = create<LoanStore>((set) => ({
         [key]: value,
       },
     })),
+
+  /* ---------------- SAVE APPROVED LOAN ---------------- */
 
   saveApprovedLoan: (data) =>
     set({

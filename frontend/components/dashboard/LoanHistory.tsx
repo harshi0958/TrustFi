@@ -1,62 +1,212 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getLoans } from "@/lib/api";
+import { getLoanByEmail } from "@/lib/api";
 
 export default function LoanHistory() {
-  const [loans, setLoans] = useState<any[]>([]);
+  const [loan, setLoan] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadLoans() {
+    async function loadLoan() {
       try {
-        const data = await getLoans();
-        setLoans(data);
+        const email = localStorage.getItem("loanEmail");
+
+        if (!email) {
+          setLoading(false);
+          return;
+        }
+
+        const data = await getLoanByEmail(email);
+
+        setLoan(data);
       } catch (err) {
-        console.error(err);
+        console.error("Failed to load user loan:", err);
+      } finally {
+        setLoading(false);
       }
     }
 
-    loadLoans();
+    loadLoan();
   }, []);
+
+  if (loading) {
+    return (
+      <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
+        <p className="text-gray-400">
+          Loading your loan details...
+        </p>
+      </div>
+    );
+  }
+
+  if (!loan) {
+    return (
+      <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
+        <h2 className="mb-2 text-2xl font-bold text-white">
+          Loan Details
+        </h2>
+
+        <p className="text-gray-400">
+          You don't have any loan application yet.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-900 p-6">
-      <h2 className="mb-5 text-2xl font-bold text-white">
-        Loan History
-      </h2>
 
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-white/10 text-left">
-            <th className="pb-3">Applicant</th>
-            <th className="pb-3">Amount</th>
-            <th className="pb-3">Score</th>
-            <th className="pb-3">Status</th>
-          </tr>
-        </thead>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-white">
+          My Loan Application
+        </h2>
 
-        <tbody>
-          {loans.map((loan) => (
-            <tr key={loan.id} className="border-b border-white/5">
-              <td className="py-4 text-white">{loan.fullName}</td>
+        <p className="mt-1 text-sm text-gray-500">
+          Your latest loan application details
+        </p>
+      </div>
 
-              <td className="py-4 text-cyan-400">
-                ₹ {loan.loanAmount.toLocaleString()}
-              </td>
+      {/* ================= DETAILS ================= */}
 
-              <td className="py-4 text-white">
-                {loan.creditScore}
-              </td>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 
-              <td className="py-4">
-                <span className="rounded-full bg-green-500/20 px-3 py-1 text-green-400">
-                  {loan.status}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        {/* LOAN TYPE */}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs text-gray-500">
+            Loan Type
+          </p>
+
+          <p className="mt-2 font-semibold text-cyan-400">
+            {loan.loanType || "PERSONAL"}
+          </p>
+        </div>
+
+        {/* AMOUNT */}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs text-gray-500">
+            Loan Amount
+          </p>
+
+          <p className="mt-2 font-semibold text-white">
+            ₹ {Number(loan.loanAmount || 0).toLocaleString("en-IN")}
+          </p>
+        </div>
+
+        {/* CREDIT SCORE */}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs text-gray-500">
+            AI Credit Score
+          </p>
+
+          <p className="mt-2 font-semibold text-cyan-400">
+            {loan.creditScore}
+          </p>
+        </div>
+
+        {/* RISK */}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs text-gray-500">
+            Risk Level
+          </p>
+
+          <p
+            className={`mt-2 font-semibold ${
+              loan.risk === "LOW"
+                ? "text-green-400"
+                : loan.risk === "MEDIUM"
+                ? "text-yellow-400"
+                : "text-red-400"
+            }`}
+          >
+            {loan.risk}
+          </p>
+        </div>
+
+      </div>
+
+      {/* ================= SECOND ROW ================= */}
+
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+
+        {/* ELIGIBILITY */}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs text-gray-500">
+            Eligibility
+          </p>
+
+          <p className="mt-2 font-semibold text-white">
+            {loan.eligibility}%
+          </p>
+        </div>
+
+        {/* INTEREST */}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs text-gray-500">
+            Interest Rate
+          </p>
+
+          <p className="mt-2 font-semibold text-white">
+            {loan.interestRate}%
+          </p>
+        </div>
+
+        {/* TENURE */}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs text-gray-500">
+            Tenure
+          </p>
+
+          <p className="mt-2 font-semibold text-white">
+            {loan.loanMonths} Months
+          </p>
+        </div>
+
+        {/* STATUS */}
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs text-gray-500">
+            Application Status
+          </p>
+
+          <p
+            className={`mt-2 font-semibold ${
+              loan.status === "APPROVED"
+                ? "text-green-400"
+                : loan.status === "REJECTED"
+                ? "text-red-400"
+                : "text-yellow-400"
+            }`}
+          >
+            {loan.status}
+          </p>
+        </div>
+
+      </div>
+
+      {/* ================= PURPOSE ================= */}
+
+      {loan.purpose && (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+
+          <p className="text-xs text-gray-500">
+            Loan Purpose
+          </p>
+
+          <p className="mt-2 text-sm text-gray-300">
+            {loan.purpose}
+          </p>
+
+        </div>
+      )}
+
     </div>
   );
 }

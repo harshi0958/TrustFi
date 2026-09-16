@@ -7,19 +7,91 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum LoanType {
+  PERSONAL
+  PROPERTY
+  GOLD
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  loans     LoanApplication[]
+  otps      UserOTP[]
+}
+
+model UserOTP {
+  id        String   @id @default(cuid())
+  userId    String
+  otpHash   String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 model LoanApplication {
   id             String   @id @default(cuid())
+
+  // User Account
+  userId         String?
+
   fullName       String
   email          String
   phone          String
+
   monthlyIncome  Float
+
+  loanType       LoanType @default(PERSONAL)
+
   loanAmount     Float
   loanMonths     Int
   purpose        String
+
+  // Property Loan Details
+  propertyType      String?
+  propertyValue     Float?
+  propertyAddress   String?
+  ownershipStatus   String?
+
+  // Gold Loan Details
+  goldWeight        Float?
+  goldPurity        String?
+  goldValue         Float?
+  goldOwnership     String?
+
   creditScore    Int
-  eligibility Int @default(0)
-interestRate Float @default(0)
-risk String @default("PENDING")
-status String @default("PENDING")
+  eligibility    Int      @default(0)
+  interestRate   Float    @default(0)
+
+  risk           String   @default("PENDING")
+  status         String   @default("PENDING")
+
+  // Payment Details
+  paymentStatus      String   @default("NOT_REQUIRED")
+  paymentAmount      Float?
+  razorpayOrderId    String?
+  razorpayPaymentId  String?
+  paidAt             DateTime?
+
   createdAt      DateTime @default(now())
+
+  user           User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
 }

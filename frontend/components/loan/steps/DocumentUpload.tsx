@@ -21,12 +21,12 @@ export default function DocumentUpload() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
 
-        <UploadCard title="Aadhaar Card" />
-        <UploadCard title="PAN Card" />
-        <UploadCard title="Salary Slip" />
-        <UploadCard title="Passport Size Photo" />
-        <UploadCard title="Bank Passbook" />
-        <UploadCard title="Credit Card (Optional)" />
+        <UploadCard title="Aadhaar Card" documentType={""} />
+        <UploadCard title="PAN Card" documentType="pan" />
+        <UploadCard title="Salary Slip" documentType="salary-slip" />
+        <UploadCard title="Passport Size Photo" documentType="passport-photo" />
+        <UploadCard title="Bank Passbook" documentType="bank-passbook" />
+        <UploadCard title="Credit Card (Optional)" documentType="credit-card" />
 
       </div>
 
