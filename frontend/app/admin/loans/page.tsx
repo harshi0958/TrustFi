@@ -533,13 +533,21 @@ export default function AdminLoansPage() {
                       Score
                     </th>
 
-                    <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
-                      Risk
-                    </th>
+                   <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+  Credit Risk
+</th>
 
-                    <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
-                      Interest
-                    </th>
+<th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+  Fraud Risk
+</th>
+
+<th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+  Fraud Score
+</th>
+
+<th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
+  Interest
+</th>
 
                     <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
                       Status
@@ -621,7 +629,50 @@ export default function AdminLoansPage() {
                       <td className="px-5 py-5 text-center">
                         {loan.interestRate}%
                       </td>
+{/* CREDIT RISK */}
 
+<td className="px-5 py-5 text-center">
+
+  <RiskBadge risk={loan.risk} />
+
+</td>
+
+
+{/* FRAUD RISK */}
+
+<td className="px-5 py-5 text-center">
+
+  <FraudRiskBadge
+    risk={loan.fraudRisk}
+  />
+
+</td>
+
+
+{/* FRAUD SCORE */}
+
+<td className="px-5 py-5 text-center">
+
+  <span
+    className={`font-bold ${
+      Number(loan.fraudScore || 0) >= 60
+        ? "text-red-400"
+        : Number(loan.fraudScore || 0) >= 30
+        ? "text-yellow-400"
+        : "text-green-400"
+    }`}
+  >
+    {Number(loan.fraudScore || 0)}
+  </span>
+
+</td>
+
+
+{/* INTEREST */}
+
+<td className="px-5 py-5 text-center">
+  {loan.interestRate}%
+</td>
 
                       {/* STATUS */}
 
@@ -684,7 +735,7 @@ export default function AdminLoansPage() {
                     <tr>
 
                       <td
-                        colSpan={8}
+                        colSpan={10}
                         className="px-6 py-16 text-center"
                       >
 
@@ -784,6 +835,36 @@ function RiskBadge({
       }`}
     >
       {risk}
+    </span>
+  );
+}
+
+/* =========================================================
+   FRAUD RISK BADGE
+========================================================= */
+
+function FraudRiskBadge({
+  risk,
+}: {
+  risk?: string;
+}) {
+  const normalizedRisk = risk || "LOW";
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1.5 text-xs ${
+        normalizedRisk === "LOW"
+          ? "bg-green-500/10 text-green-400"
+          : normalizedRisk === "MEDIUM"
+          ? "bg-yellow-500/10 text-yellow-400"
+          : "bg-red-500/10 text-red-400"
+      }`}
+    >
+      {normalizedRisk === "HIGH"
+        ? "🔴 HIGH"
+        : normalizedRisk === "MEDIUM"
+        ? "🟡 MEDIUM"
+        : "🟢 LOW"}
     </span>
   );
 }

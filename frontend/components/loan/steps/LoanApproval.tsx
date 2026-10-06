@@ -18,11 +18,12 @@ export default function LoanApproval() {
   const router = useRouter();
 
   const {
-    personal,
-    loan,
-    documents,
-    saveApprovedLoan,
-  } = useLoanStore();
+  personal,
+  loan,
+  documents,
+  saveApprovedLoan,
+  fraudAssessment,
+} = useLoanStore();
 
   const [isSubmitting, setIsSubmitting] =
     useState(false);
@@ -286,6 +287,10 @@ export default function LoanApproval() {
         creditScore: Number(
           result.score || 0
         ),
+
+        fraudRisk: fraudAssessment.fraudScore,
+
+fraudFlags: fraudAssessment.fraudFlags,
 
         /*
          * IMPORTANT:

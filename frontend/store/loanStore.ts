@@ -88,6 +88,12 @@ interface ApprovedLoan {
   status: string;
 }
 
+interface FraudAssessment {
+  fraudScore: number;
+  fraudRisk: "LOW" | "MEDIUM" | "HIGH";
+  fraudFlags: string[];
+}
+
 /* ---------------- STORE ---------------- */
 
 interface LoanStore {
@@ -99,6 +105,7 @@ interface LoanStore {
   loan: LoanDetails;
   documents: UploadedDocuments;
   approvedLoan: ApprovedLoan;
+  fraudAssessment: FraudAssessment;
 
   setCurrentStep: (step: number) => void;
   nextStep: () => void;
@@ -115,6 +122,8 @@ interface LoanStore {
   ) => void;
 
   saveApprovedLoan: (data: ApprovedLoan) => void;
+  
+  updateFraudAssessment: (data: FraudAssessment) => void;
 }
 
 export const useLoanStore = create<LoanStore>((set) => ({
@@ -173,24 +182,24 @@ export const useLoanStore = create<LoanStore>((set) => ({
 
   /* ---------------- LOAN ---------------- */
 
-loan: {
-  loanType: "PERSONAL",
-  amount: 500000,
-  months: 24,
-  purpose: "",
+  loan: {
+    loanType: "PERSONAL",
+    amount: 500000,
+    months: 24,
+    purpose: "",
 
-  // Property Loan
-  propertyType: "",
-  propertyValue: 0,
-  propertyAddress: "",
-  ownershipStatus: "",
+    // Property Loan
+    propertyType: "",
+    propertyValue: 0,
+    propertyAddress: "",
+    ownershipStatus: "",
 
-  // Gold Loan
-  goldWeight: 0,
-  goldPurity: "",
-  goldValue: 0,
-  goldOwnership: "",
-},
+    // Gold Loan
+    goldWeight: 0,
+    goldPurity: "",
+    goldValue: 0,
+    goldOwnership: "",
+  },
 
   /* ---------------- APPROVED LOAN ---------------- */
 
@@ -202,6 +211,12 @@ loan: {
     interestRate: 0,
     risk: "",
     status: "",
+  },
+
+  fraudAssessment: {
+    fraudScore: 0,
+    fraudRisk: "LOW",
+    fraudFlags: [],
   },
 
   /* ---------------- STEPPER ---------------- */
@@ -282,5 +297,10 @@ loan: {
   saveApprovedLoan: (data) =>
     set({
       approvedLoan: data,
+    }),
+
+  updateFraudAssessment: (data) =>
+    set({
+      fraudAssessment: data,
     }),
 }));

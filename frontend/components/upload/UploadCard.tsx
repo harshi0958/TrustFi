@@ -7,6 +7,7 @@ import { UploadCloud } from "lucide-react";
 import FilePreview from "./FilePreview";
 import UploadProgress from "./UploadProgress";
 import AIScanStatus from "./AIScanStatus";
+import { useLoanStore } from "@/store/loanStore";
 
 interface Props {
   title: string;
@@ -23,6 +24,7 @@ export default function UploadCard({
   onRemoved,
   onValidation,
 }: Props) {
+  const { updateFraudAssessment } = useLoanStore();
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -169,6 +171,38 @@ export default function UploadCard({
           result
         );
 
+        /* -----------------------------------------
+ * FRAUD ASSESSMENT
+ * ----------------------------------------- */
+
+const fraudAssessment =
+  result?.fraudAssessment;
+
+const extractedFraud =
+  result?.extractedText;
+
+if (
+  fraudAssessment ||
+  extractedFraud
+) {
+  updateFraudAssessment({
+    fraudScore: Number(
+      fraudAssessment?.fraudScore ??
+        extractedFraud?.fraudRisk ??
+        0
+    ),
+
+    fraudRisk:
+      fraudAssessment?.fraudRisk ??
+      extractedFraud?.fraudRiskLevel ??
+      "LOW",
+
+    fraudFlags:
+      fraudAssessment?.fraudFlags ??
+      extractedFraud?.fraudFlags ??
+      [],
+  });
+}
         /*
          * -----------------------------------------
          * BACKEND VALIDATION
