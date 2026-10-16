@@ -69,6 +69,11 @@ model LoanApplication {
   goldOwnership     String?
 
   creditScore    Int
+  fraudScore     Int      @default(0)
+  fraudRisk      String   @default("LOW")
+  fraudFlags     String?
+  riskReasons    String?
+  
   eligibility    Int      @default(0)
   interestRate   Float    @default(0)
 
@@ -94,4 +99,5 @@ model Admin {
   name      String
   email     String   @unique
   createdAt DateTime @default(now())
+
 }

@@ -1,0 +1,46 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-c95899b9698a31ad76e6901767d716c8c8862949",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "compilerType": "solc",
+  "userSourceNameMap": {
+    "contracts/BorrowerRegistry.sol": "project/contracts/BorrowerRegistry.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/BorrowerRegistry.sol": {
+        "content": "\r\n // SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.28;\r\n\r\n/// @title BorrowerRegistry\r\n/// @notice Registers borrower wallets without storing personal documents on-chain.\r\n/// @dev Keep names, mobile numbers, Aadhaar, PAN and document URLs off-chain.\r\ncontract BorrowerRegistry {\r\n    struct Borrower {\r\n        bytes32 profileCommitment;\r\n        uint64 registeredAt;\r\n        bool isRegistered;\r\n    }\r\n\r\n    mapping(address => Borrower) private borrowers;\r\n\r\n    event BorrowerRegistered(\r\n        address indexed borrower,\r\n        bytes32 profileCommitment,\r\n        uint256 registeredAt\r\n    );\r\n\r\n    event ProfileCommitmentUpdated(\r\n        address indexed borrower,\r\n        bytes32 newProfileCommitment\r\n    );\r\n\r\n    error InvalidProfileCommitment();\r\n    error AlreadyRegistered();\r\n    error NotRegistered();\r\n\r\n    /// @notice Register the caller's wallet.\r\n    /// @param profileCommitment Hash commitment to the borrower's off-chain profile.\r\n    function registerBorrower(bytes32 profileCommitment) external {\r\n        if (profileCommitment == bytes32(0)) {\r\n            revert InvalidProfileCommitment();\r\n        }\r\n\r\n        if (borrowers[msg.sender].isRegistered) {\r\n            revert AlreadyRegistered();\r\n        }\r\n\r\n        borrowers[msg.sender] = Borrower({\r\n            profileCommitment: profileCommitment,\r\n            registeredAt: uint64(block.timestamp),\r\n            isRegistered: true\r\n        });\r\n\r\n        emit BorrowerRegistered(\r\n            msg.sender,\r\n            profileCommitment,\r\n            block.timestamp\r\n        );\r\n    }\r\n\r\n    /// @notice Update the caller's profile commitment.\r\n    function updateProfileCommitment(\r\n        bytes32 newProfileCommitment\r\n    ) external {\r\n        if (newProfileCommitment == bytes32(0)) {\r\n            revert InvalidProfileCommitment();\r\n        }\r\n\r\n        if (!borrowers[msg.sender].isRegistered) {\r\n            revert NotRegistered();\r\n        }\r\n\r\n        borrowers[msg.sender].profileCommitment = newProfileCommitment;\r\n\r\n        emit ProfileCommitmentUpdated(\r\n            msg.sender,\r\n            newProfileCommitment\r\n        );\r\n    }\r\n\r\n    /// @notice Check whether a wallet is registered.\r\n    function isBorrowerRegistered(address wallet)\r\n        external\r\n        view\r\n        returns (bool)\r\n    {\r\n        return borrowers[wallet].isRegistered;\r\n    }\r\n\r\n    /// @notice Read a borrower's registration details.\r\n    function getBorrower(address wallet)\r\n        external\r\n        view\r\n        returns (\r\n            bytes32 profileCommitment,\r\n            uint64 registeredAt,\r\n            bool isRegistered\r\n        )\r\n    {\r\n        Borrower memory borrower = borrowers[wallet];\r\n\r\n        return (\r\n            borrower.profileCommitment,\r\n            borrower.registeredAt,\r\n            borrower.isRegistered\r\n        );\r\n    }\r\n}\r\n"
+      }
+    }
+  }
+}

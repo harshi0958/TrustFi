@@ -1,0 +1,46 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-70efd69d0056a06156f76be235fbe85bf89dfc8e",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "compilerType": "solc",
+  "userSourceNameMap": {
+    "contracts/LoanFactory.sol": "project/contracts/LoanFactory.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/LoanFactory.sol": {
+        "content": "\r\n // SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.28;\r\n\r\ninterface ITrustFiBorrowerRegistry {\r\n    function isBorrowerRegistered(address wallet)\r\n        external\r\n        view\r\n        returns (bool);\r\n}\r\n\r\ninterface ITrustFiLoanPoolFactory {\r\n    function approveLoan(\r\n        address borrower,\r\n        uint256 principal,\r\n        uint256 duration\r\n    ) external returns (uint256 loanId);\r\n\r\n    function disburseLoan(uint256 loanId) external;\r\n}\r\n\r\n/// @title LoanFactory\r\n/// @notice Records borrower loan requests and coordinates approved disbursements.\r\ncontract LoanFactory {\r\n    enum RequestStatus {\r\n        None,\r\n        Pending,\r\n        Approved,\r\n        Rejected,\r\n        Disbursed\r\n    }\r\n\r\n    struct LoanRequest {\r\n        uint256 requestId;\r\n        address borrower;\r\n        uint256 amount;\r\n        uint256 duration;\r\n        uint256 poolLoanId;\r\n        RequestStatus status;\r\n    }\r\n\r\n    address public owner;\r\n\r\n    ITrustFiBorrowerRegistry public immutable borrowerRegistry;\r\n    ITrustFiLoanPoolFactory public immutable loanPool;\r\n\r\n    uint256 public nextRequestId = 1;\r\n\r\n    mapping(uint256 => LoanRequest) private requests;\r\n\r\n    event LoanRequested(\r\n        uint256 indexed requestId,\r\n        address indexed borrower,\r\n        uint256 amount,\r\n        uint256 duration\r\n    );\r\n\r\n    event LoanRequestApproved(\r\n        uint256 indexed requestId,\r\n        uint256 indexed poolLoanId\r\n    );\r\n\r\n    event LoanRequestRejected(\r\n        uint256 indexed requestId,\r\n        address indexed borrower\r\n    );\r\n\r\n    event LoanDisbursed(\r\n        uint256 indexed requestId,\r\n        uint256 indexed poolLoanId,\r\n        address indexed borrower\r\n    );\r\n\r\n    error Unauthorized();\r\n    error InvalidAddress();\r\n    error InvalidAmount();\r\n    error InvalidDuration();\r\n    error BorrowerNotRegistered();\r\n    error RequestNotFound();\r\n    error InvalidRequestStatus();\r\n\r\n    modifier onlyOwner() {\r\n        if (msg.sender != owner) revert Unauthorized();\r\n        _;\r\n    }\r\n\r\n    constructor(\r\n        address registryAddress,\r\n        address loanPoolAddress\r\n    ) {\r\n        if (\r\n            registryAddress == address(0) ||\r\n            loanPoolAddress == address(0)\r\n        ) {\r\n            revert InvalidAddress();\r\n        }\r\n\r\n        owner = msg.sender;\r\n        borrowerRegistry =\r\n            ITrustFiBorrowerRegistry(registryAddress);\r\n        loanPool = ITrustFiLoanPoolFactory(loanPoolAddress);\r\n    }\r\n\r\n    /// @notice Submit a loan request from a registered wallet.\r\n    function createLoan(\r\n        uint256 amount,\r\n        uint256 duration\r\n    ) external returns (uint256 requestId) {\r\n        if (amount == 0) revert InvalidAmount();\r\n        if (duration == 0 || duration > 365 days) {\r\n            revert InvalidDuration();\r\n        }\r\n\r\n        if (!borrowerRegistry.isBorrowerRegistered(msg.sender)) {\r\n            revert BorrowerNotRegistered();\r\n        }\r\n\r\n        requestId = nextRequestId++;\r\n\r\n        requests[requestId] = LoanRequest({\r\n            requestId: requestId,\r\n            borrower: msg.sender,\r\n            amount: amount,\r\n            duration: duration,\r\n            poolLoanId: 0,\r\n            status: RequestStatus.Pending\r\n        });\r\n\r\n        emit LoanRequested(\r\n            requestId,\r\n            msg.sender,\r\n            amount,\r\n            duration\r\n        );\r\n    }\r\n\r\n    /// @notice Approve a request through LoanPool's risk checks.\r\n    function approveRequest(\r\n        uint256 requestId\r\n    ) external onlyOwner {\r\n        LoanRequest storage request = requests[requestId];\r\n\r\n        if (request.status == RequestStatus.None) {\r\n            revert RequestNotFound();\r\n        }\r\n        if (request.status != RequestStatus.Pending) {\r\n            revert InvalidRequestStatus();\r\n        }\r\n\r\n        // LoanPool checks the borrower's current RiskOracle result\r\n        // and available pool liquidity.\r\n        uint256 poolLoanId = loanPool.approveLoan(\r\n            request.borrower,\r\n            request.amount,\r\n            request.duration\r\n        );\r\n\r\n        request.poolLoanId = poolLoanId;\r\n        request.status = RequestStatus.Approved;\r\n\r\n        emit LoanRequestApproved(requestId, poolLoanId);\r\n    }\r\n\r\n    /// @notice Disburse a previously approved request.\r\n    function disburseApprovedRequest(\r\n        uint256 requestId\r\n    ) external onlyOwner {\r\n        LoanRequest storage request = requests[requestId];\r\n\r\n        if (request.status == RequestStatus.None) {\r\n            revert RequestNotFound();\r\n        }\r\n        if (request.status != RequestStatus.Approved) {\r\n            revert InvalidRequestStatus();\r\n        }\r\n\r\n        loanPool.disburseLoan(request.poolLoanId);\r\n\r\n        request.status = RequestStatus.Disbursed;\r\n\r\n        emit LoanDisbursed(\r\n            requestId,\r\n            request.poolLoanId,\r\n            request.borrower\r\n        );\r\n    }\r\n\r\n    /// @notice Reject a pending loan request.\r\n    function rejectRequest(\r\n        uint256 requestId\r\n    ) external onlyOwner {\r\n        LoanRequest storage request = requests[requestId];\r\n\r\n        if (request.status == RequestStatus.None) {\r\n            revert RequestNotFound();\r\n        }\r\n        if (request.status != RequestStatus.Pending) {\r\n            revert InvalidRequestStatus();\r\n        }\r\n\r\n        request.status = RequestStatus.Rejected;\r\n\r\n        emit LoanRequestRejected(\r\n            requestId,\r\n            request.borrower\r\n        );\r\n    }\r\n\r\n    /// @notice Read the details and current status of a request.\r\n    function getLoan(uint256 requestId)\r\n        external\r\n        view\r\n        returns (LoanRequest memory)\r\n    {\r\n        if (requests[requestId].status == RequestStatus.None) {\r\n            revert RequestNotFound();\r\n        }\r\n\r\n        return requests[requestId];\r\n    }\r\n}\r\n"
+      }
+    }
+  }
+}

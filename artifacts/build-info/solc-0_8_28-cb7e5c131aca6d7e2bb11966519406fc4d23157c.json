@@ -1,0 +1,46 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-cb7e5c131aca6d7e2bb11966519406fc4d23157c",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "compilerType": "solc",
+  "userSourceNameMap": {
+    "contracts/RiskOracle.sol": "project/contracts/RiskOracle.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/RiskOracle.sol": {
+        "content": "\r\n // SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.28;\r\n\r\ninterface IBorrowerRegistry {\r\n    function isBorrowerRegistered(address wallet)\r\n        external\r\n        view\r\n        returns (bool);\r\n}\r\n\r\n/// @title RiskOracle\r\n/// @notice Stores authorized risk assessments for registered TrustFi borrowers.\r\n/// @dev Actual AI/ML scoring happens off-chain. Never store private documents here.\r\ncontract RiskOracle {\r\n    struct Assessment {\r\n        uint8 score;\r\n        bool eligible;\r\n        uint64 assessedAt;\r\n        bytes32 assessmentCommitment;\r\n        bool exists;\r\n    }\r\n\r\n    address public owner;\r\n    IBorrowerRegistry public immutable borrowerRegistry;\r\n\r\n    uint8 public minimumEligibleScore = 70;\r\n\r\n    mapping(address => bool) public authorizedAssessors;\r\n    mapping(address => Assessment) private assessments;\r\n\r\n    event AssessorAuthorizationChanged(\r\n        address indexed assessor,\r\n        bool authorized\r\n    );\r\n\r\n    event MinimumEligibleScoreUpdated(uint8 newMinimumScore);\r\n\r\n    event RiskAssessmentSubmitted(\r\n        address indexed borrower,\r\n        address indexed assessor,\r\n        uint8 score,\r\n        bool eligible,\r\n        uint256 assessedAt\r\n    );\r\n\r\n    error Unauthorized();\r\n    error InvalidAddress();\r\n    error InvalidScore();\r\n    error InvalidCommitment();\r\n    error BorrowerNotRegistered();\r\n    error AssessmentNotFound();\r\n\r\n    modifier onlyOwner() {\r\n        if (msg.sender != owner) revert Unauthorized();\r\n        _;\r\n    }\r\n\r\n    modifier onlyAuthorizedAssessor() {\r\n        if (!authorizedAssessors[msg.sender]) revert Unauthorized();\r\n        _;\r\n    }\r\n\r\n    constructor(address registryAddress) {\r\n        if (registryAddress == address(0)) revert InvalidAddress();\r\n\r\n        owner = msg.sender;\r\n        borrowerRegistry = IBorrowerRegistry(registryAddress);\r\n    }\r\n\r\n    /// @notice Authorize or revoke an off-chain risk service wallet.\r\n    function setAuthorizedAssessor(\r\n        address assessor,\r\n        bool authorized\r\n    ) external onlyOwner {\r\n        if (assessor == address(0)) revert InvalidAddress();\r\n\r\n        authorizedAssessors[assessor] = authorized;\r\n\r\n        emit AssessorAuthorizationChanged(assessor, authorized);\r\n    }\r\n\r\n    /// @notice Change the score required to be considered eligible.\r\n    function setMinimumEligibleScore(\r\n        uint8 newMinimumScore\r\n    ) external onlyOwner {\r\n        if (newMinimumScore > 100) revert InvalidScore();\r\n\r\n        minimumEligibleScore = newMinimumScore;\r\n\r\n        emit MinimumEligibleScoreUpdated(newMinimumScore);\r\n    }\r\n\r\n    /// @notice Record a risk assessment for a registered borrower.\r\n    /// @param borrower Registered borrower's wallet.\r\n    /// @param score Risk model output from 0 to 100; higher means lower risk.\r\n    /// @param assessmentCommitment Commitment to the off-chain assessment.\r\n    function submitRiskAssessment(\r\n        address borrower,\r\n        uint8 score,\r\n        bytes32 assessmentCommitment\r\n    ) external onlyAuthorizedAssessor {\r\n        if (borrower == address(0)) revert InvalidAddress();\r\n        if (score > 100) revert InvalidScore();\r\n        if (assessmentCommitment == bytes32(0)) {\r\n            revert InvalidCommitment();\r\n        }\r\n\r\n        if (!borrowerRegistry.isBorrowerRegistered(borrower)) {\r\n            revert BorrowerNotRegistered();\r\n        }\r\n\r\n        bool eligible = score >= minimumEligibleScore;\r\n\r\n        assessments[borrower] = Assessment({\r\n            score: score,\r\n            eligible: eligible,\r\n            assessedAt: uint64(block.timestamp),\r\n            assessmentCommitment: assessmentCommitment,\r\n            exists: true\r\n        });\r\n\r\n        emit RiskAssessmentSubmitted(\r\n            borrower,\r\n            msg.sender,\r\n            score,\r\n            eligible,\r\n            block.timestamp\r\n        );\r\n    }\r\n\r\n    /// @notice Read the latest assessment for a borrower.\r\n    function getRiskAssessment(address borrower)\r\n        external\r\n        view\r\n        returns (\r\n            uint8 score,\r\n            bool eligible,\r\n            uint64 assessedAt,\r\n            bytes32 assessmentCommitment\r\n        )\r\n    {\r\n        Assessment memory assessment = assessments[borrower];\r\n\r\n        if (!assessment.exists) revert AssessmentNotFound();\r\n\r\n        return (\r\n            assessment.score,\r\n            assessment.eligible,\r\n            assessment.assessedAt,\r\n            assessment.assessmentCommitment\r\n        );\r\n    }\r\n\r\n    function hasRiskAssessment(address borrower)\r\n        external\r\n        view\r\n        returns (bool)\r\n    {\r\n        return assessments[borrower].exists;\r\n    }\r\n}\r\n"
+      }
+    }
+  }
+}

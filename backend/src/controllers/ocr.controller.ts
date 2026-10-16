@@ -7,7 +7,6 @@ export const ocrController = async (
   res: Response
 ) => {
   try {
-
     /*
      * -----------------------------------------
      * CHECK FILE
@@ -66,19 +65,21 @@ export const ocrController = async (
      * SELFIE
      *
      * Do NOT send selfie through OCR.
-     * A selfie is an image used for
-     * face verification.
      * -----------------------------------------
      */
 
     if (expectedType === "SELFIE") {
       return res.json({
         success: true,
-        message: "Selfie uploaded successfully",
+
+        message:
+          "Selfie uploaded successfully",
+
         expectedDocumentType: "SELFIE",
 
         extractedText: {
           rawText: "",
+
           name: "Not Applicable",
           aadhaar: "Not Applicable",
           mobile: "Not Applicable",
@@ -93,6 +94,18 @@ export const ocrController = async (
 
           validationMessage:
             "Selfie accepted for identity verification.",
+
+          /*
+           * ---------------------------------
+           * FRAUD RESULT
+           * ---------------------------------
+           */
+
+          fraudRisk: 0,
+
+          fraudRiskLevel: "LOW",
+
+          fraudFlags: [],
         },
       });
     }
@@ -110,6 +123,32 @@ export const ocrController = async (
 
     /*
      * -----------------------------------------
+     * FRAUD / VALIDATION SUMMARY
+     * -----------------------------------------
+     */
+
+    const fraudAssessment = {
+      fraudScore: Number(
+        result.fraudRisk || 0
+      ),
+
+      fraudRisk:
+        result.fraudRiskLevel || "LOW",
+
+      fraudFlags:
+        Array.isArray(result.fraudFlags)
+          ? result.fraudFlags
+          : [],
+
+      documentValid:
+        Boolean(result.documentValid),
+
+      confidence:
+        Number(result.confidence || 0),
+    };
+
+    /*
+     * -----------------------------------------
      * RESPONSE
      * -----------------------------------------
      */
@@ -118,19 +157,34 @@ export const ocrController = async (
       success: true,
 
       message:
-        "Document uploaded and verified successfully",
+        result.documentValid
+          ? "Document uploaded and verified successfully"
+          : "Document uploaded but validation issues were detected",
 
-      expectedDocumentType: expectedType,
+      expectedDocumentType:
+        expectedType,
 
       extractedText: result,
+
+      /*
+       * ---------------------------------------
+       * FRAUD ASSESSMENT
+       * ---------------------------------------
+       */
+
+      fraudAssessment,
     });
 
   } catch (err: any) {
 
-    console.error("OCR Error:", err);
+    console.error(
+      "OCR Error:",
+      err
+    );
 
     return res.status(500).json({
       success: false,
+
       message:
         err.message ||
         "OCR processing failed",

@@ -1,0 +1,147 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "BorrowerRegistry",
+  "sourceName": "contracts/BorrowerRegistry.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "AlreadyRegistered",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidProfileCommitment",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NotRegistered",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "borrower",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "profileCommitment",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "registeredAt",
+          "type": "uint256"
+        }
+      ],
+      "name": "BorrowerRegistered",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "borrower",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "newProfileCommitment",
+          "type": "bytes32"
+        }
+      ],
+      "name": "ProfileCommitmentUpdated",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "wallet",
+          "type": "address"
+        }
+      ],
+      "name": "getBorrower",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "profileCommitment",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "registeredAt",
+          "type": "uint64"
+        },
+        {
+          "internalType": "bool",
+          "name": "isRegistered",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "wallet",
+          "type": "address"
+        }
+      ],
+      "name": "isBorrowerRegistered",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "profileCommitment",
+          "type": "bytes32"
+        }
+      ],
+      "name": "registerBorrower",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "newProfileCommitment",
+          "type": "bytes32"
+        }
+      ],
+      "name": "updateProfileCommitment",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x6080604052348015600e575f5ffd5b506103588061001c5f395ff3fe608060405234801561000f575f5ffd5b506004361061004a575f3560e01c8063573c60d31461004e5780635d1f68bc1461006357806379d335b414610076578063ad5b3642146100c0575b5f5ffd5b61006161005c3660046102de565b610147565b005b6100616100713660046102de565b610247565b6100ab6100843660046102f5565b6001600160a01b03165f90815260208190526040902060010154600160401b900460ff1690565b60405190151581526020015b60405180910390f35b6101216100ce3660046102f5565b6001600160a01b03165f90815260208181526040918290208251606081018452815480825260019092015467ffffffffffffffff8116938201849052600160401b900460ff161515930183905292909190565b6040805193845267ffffffffffffffff90921660208401521515908201526060016100b7565b80610165576040516341d6073760e01b815260040160405180910390fd5b335f90815260208190526040902060010154600160401b900460ff161561019f57604051630ea075bf60e21b815260040160405180910390fd5b6040805160608101825282815267ffffffffffffffff4281811660208085019182526001858701818152335f81815293849052928890209651875592519501805492511515600160401b0268ffffffffffffffffff19909316959094169490941717909155915190917f3863757e867e38c0f4224f05665cb5e9d4fe4d9750062f1eb88bb0f0f8e25d149161023c91858252602082015260400190565b60405180910390a250565b80610265576040516341d6073760e01b815260040160405180910390fd5b335f90815260208190526040902060010154600160401b900460ff1661029e5760405163aba4733960e01b815260040160405180910390fd5b335f818152602081815260409182902084905590518381527f40926638f33c43f61f00d902372b63cd1226d10bb45e85b674e6c519afd03d90910161023c565b5f602082840312156102ee575f5ffd5b5035919050565b5f60208284031215610305575f5ffd5b81356001600160a01b038116811461031b575f5ffd5b939250505056fea26469706673582212205726e3f3c7f02038ec516b263c89198bdf6a2c7bfe5b7313529091cdab723d5764736f6c634300081c0033",
+  "deployedBytecode": "0x608060405234801561000f575f5ffd5b506004361061004a575f3560e01c8063573c60d31461004e5780635d1f68bc1461006357806379d335b414610076578063ad5b3642146100c0575b5f5ffd5b61006161005c3660046102de565b610147565b005b6100616100713660046102de565b610247565b6100ab6100843660046102f5565b6001600160a01b03165f90815260208190526040902060010154600160401b900460ff1690565b60405190151581526020015b60405180910390f35b6101216100ce3660046102f5565b6001600160a01b03165f90815260208181526040918290208251606081018452815480825260019092015467ffffffffffffffff8116938201849052600160401b900460ff161515930183905292909190565b6040805193845267ffffffffffffffff90921660208401521515908201526060016100b7565b80610165576040516341d6073760e01b815260040160405180910390fd5b335f90815260208190526040902060010154600160401b900460ff161561019f57604051630ea075bf60e21b815260040160405180910390fd5b6040805160608101825282815267ffffffffffffffff4281811660208085019182526001858701818152335f81815293849052928890209651875592519501805492511515600160401b0268ffffffffffffffffff19909316959094169490941717909155915190917f3863757e867e38c0f4224f05665cb5e9d4fe4d9750062f1eb88bb0f0f8e25d149161023c91858252602082015260400190565b60405180910390a250565b80610265576040516341d6073760e01b815260040160405180910390fd5b335f90815260208190526040902060010154600160401b900460ff1661029e5760405163aba4733960e01b815260040160405180910390fd5b335f818152602081815260409182902084905590518381527f40926638f33c43f61f00d902372b63cd1226d10bb45e85b674e6c519afd03d90910161023c565b5f602082840312156102ee575f5ffd5b5035919050565b5f60208284031215610305575f5ffd5b81356001600160a01b038116811461031b575f5ffd5b939250505056fea26469706673582212205726e3f3c7f02038ec516b263c89198bdf6a2c7bfe5b7313529091cdab723d5764736f6c634300081c0033",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/BorrowerRegistry.sol",
+  "buildInfoId": "solc-0_8_28-c95899b9698a31ad76e6901767d716c8c8862949"
+}

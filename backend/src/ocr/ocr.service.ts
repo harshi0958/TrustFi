@@ -1,3 +1,7 @@
+import {
+  validateDocument,
+} from "../services/documentValidation.service";
+
 import Tesseract from "tesseract.js";
 
 export type DocumentType =
@@ -735,6 +739,24 @@ export async function extractText(
       expectedType
     );
 
+    /* -----------------------------------------
+   * DOCUMENT FRAUD VALIDATION
+   * ----------------------------------------- */
+
+  const documentValidation = expectedType
+    ? validateDocument(
+        expectedType,
+        text,
+        {
+          name,
+          aadhaar,
+          pan,
+          mobile,
+          dob,
+        }
+      )
+    : null;
+
   /*
    * -----------------------------------------
    * DEBUG LOG
@@ -785,17 +807,13 @@ export async function extractText(
    * -----------------------------------------
    */
 
-  return {
+    return {
     rawText: text,
 
     name,
-
     dob,
-
     aadhaar,
-
     pan,
-
     mobile,
 
     detectedType,
@@ -806,8 +824,28 @@ export async function extractText(
 
     confidence,
 
-    documentValid,
+    documentValid:
+      documentValidation?.valid ??
+      documentValid,
 
-    validationMessage,
+    validationMessage:
+      documentValidation?.reasons?.join("; ") ||
+      validationMessage,
+
+    /* -------------------------
+     * FRAUD DETECTION RESULT
+     * ------------------------- */
+
+    fraudRisk:
+      documentValidation?.fraudRisk ??
+      0,
+
+    fraudRiskLevel:
+      documentValidation?.riskLevel ??
+      "LOW",
+
+    fraudFlags:
+      documentValidation?.reasons ??
+      [],
   };
 }

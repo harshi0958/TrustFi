@@ -2,6 +2,12 @@ import { Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { sendWelcomeEmail } from "../services/email.service";
 import twilio from "twilio";
+import {
+  createSessionToken,
+  getSessionCookieName,
+  getSessionCookieOptions,
+  verifySessionToken,
+} from "../lib/auth-session";
 
 // =====================================================
 // REGISTER USER
@@ -359,18 +365,26 @@ export const verifyOTP = async (req: Request, res: Response) => {
     // OTP SUCCESS
     // -----------------------------
 
-    if (verificationCheck.status === "approved") {
-      return res.json({
-        success: true,
-        message: "OTP verified successfully.",
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-        },
-      });
-    }
+   if (verificationCheck.status === "approved") {
+  const token = createSessionToken(user.id);
+
+  res.cookie(
+    getSessionCookieName(),
+    token,
+    getSessionCookieOptions()
+  );
+
+  return res.json({
+    success: true,
+    message: "OTP verified successfully.",
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+    },
+  });
+}
 
     // -----------------------------
     // OTP NOT APPROVED
@@ -390,4 +404,91 @@ export const verifyOTP = async (req: Request, res: Response) => {
         "OTP verification failed. Please try again.",
     });
   }
+};
+
+
+export const getCurrentUser = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const cookieHeader = req.headers.cookie ?? "";
+    const cookieName = getSessionCookieName();
+
+    const token = cookieHeader
+      .split(";")
+      .map((item) => item.trim())
+      .find((item) => item.startsWith(`${cookieName}=`))
+      ?.slice(cookieName.length + 1);
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Please log in to continue.",
+      });
+    }
+
+    const session = verifySessionToken(token);
+
+    if (!session) {
+      res.clearCookie(
+        cookieName,
+        getSessionCookieOptions()
+      );
+
+      return res.status(401).json({
+        success: false,
+        message: "Your session is invalid or has expired.",
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.sub },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+      },
+    });
+
+    if (!user) {
+      res.clearCookie(
+        cookieName,
+        getSessionCookieOptions()
+      );
+
+      return res.status(401).json({
+        success: false,
+        message: "Account not found. Please log in again.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      user,
+    });
+  } catch (error) {
+    console.error("Get current user error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to validate your session.",
+    });
+  }
+};
+
+export const logoutUser = async (
+  _req: Request,
+  res: Response
+) => {
+  res.clearCookie(
+    getSessionCookieName(),
+    getSessionCookieOptions()
+  );
+
+  return res.json({
+    success: true,
+    message: "Logged out successfully.",
+  });
 };

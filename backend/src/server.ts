@@ -12,7 +12,26 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = new Set([
+  "http://localhost:3000",
+  "https://trust-fi.vercel.app",
+  ...(process.env.FRONTEND_URL
+    ? [process.env.FRONTEND_URL.replace(/\/$/, "")]
+    : []),
+]);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Origin not allowed by CORS."));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 app.use("/api/loan", loanRoutes);

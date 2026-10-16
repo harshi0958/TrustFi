@@ -741,7 +741,7 @@ export default function AdminLoansPage() {
 
                         <div className="text-4xl mb-3">
                           🔍
-                        </div>
+                        </div> 
 
                         <p className="font-semibold">
                           No applications found

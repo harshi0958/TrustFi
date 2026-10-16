@@ -23,63 +23,55 @@
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
 
-    const handleSendOTP = async () => {
+    
+const handleSendOTP = async () => {
+  setError("");
+  setMessage("");
 
-        setError("");
-        setMessage("");
+  const cleanPhone = phone.replace(/\s+/g, "");
+  const normalizedPhone = cleanPhone.startsWith("+91")
+    ? cleanPhone
+    : `+91${cleanPhone}`;
 
-        const cleanPhone = phone.replace(/\s+/g, "");
+  const phoneRegex = /^\+91[6-9]\d{9}$/;
 
-        const normalizedPhone = cleanPhone.startsWith("+91")
-        ? cleanPhone
-        : `+91${cleanPhone}`;
+  if (!phoneRegex.test(normalizedPhone)) {
+    setError("Please enter a valid 10-digit Indian mobile number.");
+    return;
+  }
 
-        const phoneRegex = /^\+91[6-9]\d{9}$/;
+  try {
+    setLoading(true);
 
-        if (!phoneRegex.test(normalizedPhone)) {
-        setError("Please enter a valid 10-digit Indian mobile number.");
-        return;
-        }
+    const response = await fetch(`${API}/api/auth/send-otp`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        phone: normalizedPhone,
+      }),
+    });
 
-        try {
-        setLoading(true);
+    const data = await response.json();
 
-        const response = await fetch(`${API}/api/auth/send-otp`, {
-            method: "POST",
-            headers: {
-            "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-            phone: normalizedPhone,
-            }),
-        });
+    if (!response.ok) {
+      throw new Error(data.message || "Failed to send OTP.");
+    }
 
-        const data = await response.json();
+    console.log("OTP Request Response:", data);
+    setOtpSent(true);
+    setOtp("");
+    setMessage("OTP sent successfully. Please check your mobile for the OTP.");
+  } catch (err: any) {
+    console.error("Send OTP Error:", err);
+    setError(err.message || "Unable to send OTP. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
 
-        if (!response.ok) {
-            throw new Error(
-            data.message || "Failed to send OTP."
-            );
-        }
-
-        console.log("OTP Request Response:", data);
-
-        setOtpSent(true);
-        setOtp("");
-        setMessage(
-      "OTP sent successfully. Please check the backend terminal for the test OTP."
-    );
-
-        } catch (err: any) {
-        console.error("Send OTP Error:", err);
-
-        setError(
-            err.message || "Unable to send OTP. Please try again."
-        );
-        } finally {
-        setLoading(false);
-        }
-    };
 
     const handleVerifyOTP = async () => {
 
@@ -103,15 +95,16 @@
         setLoading(true);
 
         const response = await fetch(`${API}/api/auth/verify-otp`, {
-            method: "POST",
-            headers: {
-            "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-            phone: normalizedPhone,
-            otp: cleanOTP,
-            }),
-        });
+  method: "POST",
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    phone: normalizedPhone,
+    otp: cleanOTP,
+  }),
+});
 
         const data = await response.json();
 
@@ -122,6 +115,31 @@
         }
 
         console.log("OTP Verification Response:", data);
+
+        
+const sessionResponse = await fetch(`${API}/api/auth/me`, {
+  method: "GET",
+  credentials: "include",
+  cache: "no-store",
+});
+
+const sessionData = await sessionResponse.json();
+
+if (!sessionResponse.ok || !sessionData.success) {
+  throw new Error(
+    sessionData.message ||
+      "OTP verified, but your session could not be established. Please try again."
+  );
+}
+
+setMessage(
+  `Welcome back, ${sessionData.user?.name || data.user?.name || "User"}! Login successful.`
+);
+
+setOtp("");
+
+router.replace("/dashboard");
+
 
         setMessage(
             `Welcome back, ${data.user?.name || "User"}! OTP verified successfully.`

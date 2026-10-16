@@ -7,31 +7,35 @@ export const applyLoan = async (req: Request, res: Response) => {
 
   try {
     const {
-  fullName,
-  email,
-  phone,
-  monthlyIncome,
-  loanType,
-  loanAmount,
-  loanMonths,
-  purpose,
-  creditScore,
-  occupation,
-  documentsVerified,
-  bankVerified,
+      fullName,
+      email,
+      phone,
+      monthlyIncome,
+      loanType,
+      loanAmount,
+      loanMonths,
+      purpose,
+      creditScore,
+      occupation,
+      documentsVerified,
+      bankVerified,
 
-  // Property Loan
-  propertyType,
-  propertyValue,
-  propertyAddress,
-  ownershipStatus,
+      // Fraud Detection
+      fraudRisk,
+      fraudFlags,
 
-  // Gold Loan
-  goldWeight,
-  goldPurity,
-  goldValue,
-  goldOwnership,
-} = req.body;
+      // Property Loan
+      propertyType,
+      propertyValue,
+      propertyAddress,
+      ownershipStatus,
+
+      // Gold Loan
+      goldWeight,
+      goldPurity,
+      goldValue,
+      goldOwnership,
+    } = req.body;
 
     /* ---------------- VALIDATION ---------------- */
 
@@ -70,109 +74,158 @@ export const applyLoan = async (req: Request, res: Response) => {
       });
     }
 
-    /* ---------------- CREDIT / RISK ---------------- */
+    /* ---------------- CREDIT / RISK / FRAUD ---------------- */
 
-   const score = calculateRisk({
-  monthlyIncome: Number(monthlyIncome),
-  loanAmount: Number(loanAmount),
-  loanMonths: Number(loanMonths),
-  creditScore: Number(creditScore || 0),
+    const score = calculateRisk({
+      monthlyIncome: Number(monthlyIncome),
+      loanAmount: Number(loanAmount),
+      loanMonths: Number(loanMonths),
+      creditScore: Number(creditScore || 0),
 
-  occupation: req.body.occupation || "",
-  documentsVerified: req.body.documentsVerified ?? false,
-  bankVerified: req.body.bankVerified ?? false,
-});
+      occupation: String(occupation),
+      documentsVerified: Boolean(documentsVerified),
+      bankVerified: Boolean(bankVerified),
+
+      fraudRisk:
+        fraudRisk !== undefined
+          ? Number(fraudRisk)
+          : undefined,
+
+      fraudFlags:
+        Array.isArray(fraudFlags)
+          ? fraudFlags
+          : [],
+    });
 
     /* ---------------- CREATE LOAN ---------------- */
 
     const loan = await prisma.loanApplication.create({
-  data: {
-    fullName,
-    email,
-    phone,
+      data: {
+        fullName,
+        email,
+        phone,
 
-    monthlyIncome: Number(monthlyIncome),
+        monthlyIncome: Number(monthlyIncome),
 
-    loanType,
+        loanType,
 
-    loanAmount: Number(loanAmount),
-    loanMonths: Number(loanMonths),
-    purpose,
+        loanAmount: Number(loanAmount),
+        loanMonths: Number(loanMonths),
+        purpose,
 
-    // =========================
-    // PROPERTY LOAN DETAILS
-    // =========================
+        // =========================
+        // PROPERTY LOAN DETAILS
+        // =========================
 
-    propertyType:
-      loanType === "PROPERTY"
-        ? propertyType || null
-        : null,
+        propertyType:
+          loanType === "PROPERTY"
+            ? propertyType || null
+            : null,
 
-    propertyValue:
-      loanType === "PROPERTY"
-        ? Number(propertyValue || 0)
-        : null,
+        propertyValue:
+          loanType === "PROPERTY"
+            ? Number(propertyValue || 0)
+            : null,
 
-    propertyAddress:
-      loanType === "PROPERTY"
-        ? propertyAddress || null
-        : null,
+        propertyAddress:
+          loanType === "PROPERTY"
+            ? propertyAddress || null
+            : null,
 
-    ownershipStatus:
-      loanType === "PROPERTY"
-        ? ownershipStatus || null
-        : null,
+        ownershipStatus:
+          loanType === "PROPERTY"
+            ? ownershipStatus || null
+            : null,
 
-    // =========================
-    // GOLD LOAN DETAILS
-    // =========================
+        // =========================
+        // GOLD LOAN DETAILS
+        // =========================
 
-    goldWeight:
-      loanType === "GOLD"
-        ? Number(goldWeight || 0)
-        : null,
+        goldWeight:
+          loanType === "GOLD"
+            ? Number(goldWeight || 0)
+            : null,
 
-    goldPurity:
-      loanType === "GOLD"
-        ? goldPurity || null
-        : null,
+        goldPurity:
+          loanType === "GOLD"
+            ? goldPurity || null
+            : null,
 
-    goldValue:
-      loanType === "GOLD"
-        ? Number(goldValue || 0)
-        : null,
+        goldValue:
+          loanType === "GOLD"
+            ? Number(goldValue || 0)
+            : null,
 
-    goldOwnership:
-      loanType === "GOLD"
-        ? goldOwnership || null
-        : null,
+        goldOwnership:
+          loanType === "GOLD"
+            ? goldOwnership || null
+            : null,
 
-    // =========================
-    // AI RESULT
-    // =========================
+        // =========================
+        // AI / RISK RESULT
+        // =========================
 
-    creditScore: Number(creditScore || 0),
+        // IMPORTANT:
+        // Save the SERVER-CALCULATED score,
+        // not the client-supplied creditScore.
+        creditScore: score.score,
 
-    risk: score.risk,
-    eligibility: score.eligibility,
-    interestRate: score.interestRate,
+        risk: score.risk,
+        eligibility: score.eligibility,
+        interestRate: score.interestRate,
 
-    status: "PENDING",
-  },
-});
+        // =========================
+        // FRAUD DETECTION
+        // =========================
+
+        fraudScore: score.fraudScore,
+
+        fraudRisk: score.fraudRisk,
+
+        fraudFlags:
+          score.fraudFlags.length > 0
+            ? JSON.stringify(score.fraudFlags)
+            : null,
+
+        riskReasons:
+          score.riskReasons.length > 0
+            ? JSON.stringify(score.riskReasons)
+            : null,
+
+        status: "PENDING",
+      },
+    });
 
     /* ---------------- RESPONSE ---------------- */
 
-    res.json({
+    return res.json({
       success: true,
       message: "Loan application submitted successfully.",
       loan,
+
+      riskAssessment: {
+        score: score.score,
+        risk: score.risk,
+        eligibility: score.eligibility,
+        interestRate: score.interestRate,
+        approved: score.approved,
+        eligibleAmount: score.eligibleAmount,
+        emi: score.emi,
+      },
+
+      fraudAssessment: {
+        fraudScore: score.fraudScore,
+        fraudRisk: score.fraudRisk,
+        fraudFlags: score.fraudFlags,
+      },
+
+      riskReasons: score.riskReasons,
     });
 
   } catch (error: any) {
     console.error("Loan Application Error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message,
     });
@@ -195,12 +248,12 @@ export const getLoans = async (
         },
       });
 
-    res.json(loans);
+    return res.json(loans);
 
   } catch (error: any) {
     console.error("Get Loans Error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message,
     });
@@ -228,7 +281,7 @@ export const getLoanByEmail = async (
         },
       });
 
-    res.json(loan);
+    return res.json(loan);
 
   } catch (error: any) {
     console.error(
@@ -236,7 +289,7 @@ export const getLoanByEmail = async (
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message,
     });
@@ -264,7 +317,7 @@ export const approveLoan = async (
         },
       });
 
-    res.json({
+    return res.json({
       success: true,
       message: "Loan approved successfully.",
       loan,
@@ -276,7 +329,7 @@ export const approveLoan = async (
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message,
     });
@@ -304,7 +357,7 @@ export const rejectLoan = async (
         },
       });
 
-    res.json({
+    return res.json({
       success: true,
       message: "Loan rejected successfully.",
       loan,
@@ -316,12 +369,17 @@ export const rejectLoan = async (
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: error.message,
     });
   }
 };
+
+/* ========================================================= */
+/* CALCULATE LOAN RISK */
+/* ========================================================= */
+
 export const calculateLoanRisk = async (
   req: Request,
   res: Response
@@ -335,6 +393,10 @@ export const calculateLoanRisk = async (
       occupation,
       documentsVerified,
       bankVerified,
+
+      // Fraud Detection
+      fraudRisk,
+      fraudFlags,
     } = req.body;
 
     if (
@@ -347,7 +409,8 @@ export const calculateLoanRisk = async (
     ) {
       return res.status(400).json({
         success: false,
-        message: "Missing required risk assessment fields.",
+        message:
+          "Missing required risk assessment fields.",
       });
     }
 
@@ -356,22 +419,38 @@ export const calculateLoanRisk = async (
       loanAmount: Number(loanAmount),
       loanMonths: Number(loanMonths),
       creditScore: Number(creditScore || 0),
+
       occupation: String(occupation),
       documentsVerified: Boolean(documentsVerified),
       bankVerified: Boolean(bankVerified),
+
+      fraudRisk:
+        fraudRisk !== undefined
+          ? Number(fraudRisk)
+          : undefined,
+
+      fraudFlags:
+        Array.isArray(fraudFlags)
+          ? fraudFlags
+          : [],
     });
 
     return res.json({
       success: true,
       risk: result,
     });
+
   } catch (error: any) {
-    console.error("Risk Calculation Error:", error);
+    console.error(
+      "Risk Calculation Error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
       message:
-        error.message || "Risk calculation failed.",
+        error.message ||
+        "Risk calculation failed.",
     });
   }
 };

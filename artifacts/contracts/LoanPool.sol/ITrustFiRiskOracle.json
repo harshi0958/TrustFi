@@ -1,0 +1,67 @@
+{
+  "_format": "hh3-artifact-1",
+  "contractName": "ITrustFiRiskOracle",
+  "sourceName": "contracts/LoanPool.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "borrower",
+          "type": "address"
+        }
+      ],
+      "name": "getRiskAssessment",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "score",
+          "type": "uint8"
+        },
+        {
+          "internalType": "bool",
+          "name": "eligible",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint64",
+          "name": "assessedAt",
+          "type": "uint64"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "assessmentCommitment",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "borrower",
+          "type": "address"
+        }
+      ],
+      "name": "hasRiskAssessment",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {},
+  "immutableReferences": {},
+  "inputSourceName": "project/contracts/LoanPool.sol",
+  "buildInfoId": "solc-0_8_28-d8b67fac8797b45e22637ab89c06c8e0d8b35ea9"
+}
