@@ -1,8 +1,7 @@
+
 "use client";
 
 import { create } from "zustand";
-
-/* ---------------- PERSONAL ---------------- */
 
 interface PersonalDetails {
   fullName: string;
@@ -19,8 +18,6 @@ interface PersonalDetails {
   monthlyIncome: string;
 }
 
-/* ---------------- DOCUMENTS ---------------- */
-
 interface UploadedDocuments {
   aadhaarFront: boolean;
   aadhaarBack: boolean;
@@ -28,13 +25,9 @@ interface UploadedDocuments {
   selfie: boolean;
   salarySlip: boolean;
   passbook: boolean;
-
-  // Loan-specific documents
   propertyDocument: boolean;
   goldDocument: boolean;
 }
-
-/* ---------------- IDENTITY ---------------- */
 
 interface IdentityDetails {
   aadhaarFront: File | null;
@@ -42,8 +35,6 @@ interface IdentityDetails {
   pan: File | null;
   passportPhoto: File | null;
 }
-
-/* ---------------- BANKING ---------------- */
 
 interface BankingDetails {
   accountHolder: string;
@@ -53,30 +44,23 @@ interface BankingDetails {
   bankName: string;
 }
 
-/* ---------------- LOAN ---------------- */
-
 export type LoanType = "PERSONAL" | "PROPERTY" | "GOLD";
+export type FraudRisk = "LOW" | "MEDIUM" | "HIGH";
 
 interface LoanDetails {
   loanType: LoanType;
   amount: number;
   months: number;
   purpose: string;
-
-  // Property Loan
   propertyType: string;
   propertyValue: number;
   propertyAddress: string;
   ownershipStatus: string;
-
-  // Gold Loan
   goldWeight: number;
   goldPurity: string;
   goldValue: number;
   goldOwnership: string;
 }
-
-/* ---------------- APPROVED LOAN ---------------- */
 
 interface ApprovedLoan {
   amount: number;
@@ -88,17 +72,25 @@ interface ApprovedLoan {
   status: string;
 }
 
-interface FraudAssessment {
+export interface DocumentFraudResult {
   fraudScore: number;
-  fraudRisk: "LOW" | "MEDIUM" | "HIGH";
+  fraudRisk: FraudRisk;
   fraudFlags: string[];
+  documentValid: boolean;
+  confidence: number;
+  validationMessage: string;
 }
 
-/* ---------------- STORE ---------------- */
+export interface FraudAssessment {
+  fraudScore: number;
+  fraudRisk: FraudRisk;
+  fraudFlags: string[];
+  assessmentCompleted: boolean;
+  documentResults: Record<string, DocumentFraudResult>;
+}
 
 interface LoanStore {
   currentStep: number;
-
   personal: PersonalDetails;
   identity: IdentityDetails;
   banking: BankingDetails;
@@ -115,21 +107,64 @@ interface LoanStore {
   updateIdentity: (data: Partial<IdentityDetails>) => void;
   updateBanking: (data: Partial<BankingDetails>) => void;
   updateLoan: (data: Partial<LoanDetails>) => void;
-
-  updateDocument: (
-    key: keyof UploadedDocuments,
-    value: boolean
-  ) => void;
-
+  updateDocument: (key: keyof UploadedDocuments, value: boolean) => void;
   saveApprovedLoan: (data: ApprovedLoan) => void;
-  
-  updateFraudAssessment: (data: FraudAssessment) => void;
+
+  updateFraudAssessment: (data: Partial<FraudAssessment>) => void;
+  updateDocumentFraudAssessment: (
+    documentKey: string,
+    data: Partial<DocumentFraudResult>
+  ) => void;
+  setFraudAssessmentCompleted: (completed: boolean) => void;
+  resetFraudAssessment: () => void;
+}
+
+const initialFraudAssessment: FraudAssessment = {
+  fraudScore: 0,
+  fraudRisk: "LOW",
+  fraudFlags: [],
+  assessmentCompleted: false,
+  documentResults: {},
+};
+
+const riskRank: Record<FraudRisk, number> = {
+  LOW: 0,
+  MEDIUM: 1,
+  HIGH: 2,
+};
+
+function normalizeRisk(value: unknown): FraudRisk {
+  if (value === "HIGH" || value === "MEDIUM") return value;
+  return "LOW";
+}
+
+function aggregateDocumentResults(
+  results: Record<string, DocumentFraudResult>
+): Pick<FraudAssessment, "fraudScore" | "fraudRisk" | "fraudFlags"> {
+  const entries = Object.values(results);
+
+  const fraudScore = entries.reduce(
+    (maximum, result) => Math.max(maximum, result.fraudScore),
+    0
+  );
+
+  const fraudRisk = entries.reduce<FraudRisk>(
+    (highest, result) =>
+      riskRank[result.fraudRisk] > riskRank[highest]
+        ? result.fraudRisk
+        : highest,
+    "LOW"
+  );
+
+  const fraudFlags = [
+    ...new Set(entries.flatMap((result) => result.fraudFlags)),
+  ];
+
+  return { fraudScore, fraudRisk, fraudFlags };
 }
 
 export const useLoanStore = create<LoanStore>((set) => ({
   currentStep: 1,
-
-  /* ---------------- PERSONAL ---------------- */
 
   personal: {
     fullName: "",
@@ -146,8 +181,6 @@ export const useLoanStore = create<LoanStore>((set) => ({
     monthlyIncome: "",
   },
 
-  /* ---------------- DOCUMENTS ---------------- */
-
   documents: {
     aadhaarFront: false,
     aadhaarBack: false,
@@ -155,13 +188,9 @@ export const useLoanStore = create<LoanStore>((set) => ({
     selfie: false,
     salarySlip: false,
     passbook: false,
-
-    // Loan-specific documents
     propertyDocument: false,
     goldDocument: false,
   },
-
-  /* ---------------- IDENTITY ---------------- */
 
   identity: {
     aadhaarFront: null,
@@ -169,8 +198,6 @@ export const useLoanStore = create<LoanStore>((set) => ({
     pan: null,
     passportPhoto: null,
   },
-
-  /* ---------------- BANKING ---------------- */
 
   banking: {
     accountHolder: "",
@@ -180,28 +207,20 @@ export const useLoanStore = create<LoanStore>((set) => ({
     bankName: "",
   },
 
-  /* ---------------- LOAN ---------------- */
-
   loan: {
     loanType: "PERSONAL",
     amount: 500000,
     months: 24,
     purpose: "",
-
-    // Property Loan
     propertyType: "",
     propertyValue: 0,
     propertyAddress: "",
     ownershipStatus: "",
-
-    // Gold Loan
     goldWeight: 0,
     goldPurity: "",
     goldValue: 0,
     goldOwnership: "",
   },
-
-  /* ---------------- APPROVED LOAN ---------------- */
 
   approvedLoan: {
     amount: 0,
@@ -214,93 +233,122 @@ export const useLoanStore = create<LoanStore>((set) => ({
   },
 
   fraudAssessment: {
-    fraudScore: 0,
-    fraudRisk: "LOW",
+    ...initialFraudAssessment,
     fraudFlags: [],
+    documentResults: {},
   },
 
-  /* ---------------- STEPPER ---------------- */
-
   setCurrentStep: (step) =>
-    set({
-      currentStep: step,
-    }),
+    set({ currentStep: Math.min(8, Math.max(1, step)) }),
 
   nextStep: () =>
     set((state) => ({
-      currentStep:
-        state.currentStep < 8
-          ? state.currentStep + 1
-          : 8,
+      currentStep: Math.min(8, state.currentStep + 1),
     })),
 
   previousStep: () =>
     set((state) => ({
-      currentStep:
-        state.currentStep > 1
-          ? state.currentStep - 1
-          : 1,
+      currentStep: Math.max(1, state.currentStep - 1),
     })),
-
-  /* ---------------- UPDATE PERSONAL ---------------- */
 
   updatePersonal: (data) =>
     set((state) => ({
-      personal: {
-        ...state.personal,
-        ...data,
-      },
+      personal: { ...state.personal, ...data },
     })),
-
-  /* ---------------- UPDATE IDENTITY ---------------- */
 
   updateIdentity: (data) =>
     set((state) => ({
-      identity: {
-        ...state.identity,
-        ...data,
-      },
+      identity: { ...state.identity, ...data },
     })),
-
-  /* ---------------- UPDATE BANKING ---------------- */
 
   updateBanking: (data) =>
     set((state) => ({
-      banking: {
-        ...state.banking,
-        ...data,
-      },
+      banking: { ...state.banking, ...data },
     })),
-
-  /* ---------------- UPDATE LOAN ---------------- */
 
   updateLoan: (data) =>
     set((state) => ({
-      loan: {
-        ...state.loan,
-        ...data,
-      },
+      loan: { ...state.loan, ...data },
     })),
-
-  /* ---------------- UPDATE DOCUMENT ---------------- */
 
   updateDocument: (key, value) =>
     set((state) => ({
-      documents: {
-        ...state.documents,
-        [key]: value,
+      documents: { ...state.documents, [key]: value },
+    })),
+
+  saveApprovedLoan: (data) => set({ approvedLoan: data }),
+
+  updateFraudAssessment: (data) =>
+    set((state) => {
+      const fraudAssessment = {
+        ...state.fraudAssessment,
+        ...data,
+        fraudFlags:
+          data.fraudFlags !== undefined
+            ? [...data.fraudFlags]
+            : state.fraudAssessment.fraudFlags,
+        documentResults:
+          data.documentResults ?? state.fraudAssessment.documentResults,
+        assessmentCompleted: false,
+      };
+
+      return { fraudAssessment };
+    }),
+
+  updateDocumentFraudAssessment: (documentKey, data) =>
+    set((state) => {
+      const previous =
+        state.fraudAssessment.documentResults[documentKey];
+
+      const result: DocumentFraudResult = {
+        fraudScore: Math.max(
+          0,
+          Math.min(100, Number(data.fraudScore ?? previous?.fraudScore ?? 0))
+        ),
+        fraudRisk: normalizeRisk(
+          data.fraudRisk ?? previous?.fraudRisk ?? "LOW"
+        ),
+        fraudFlags: [
+          ...(data.fraudFlags ?? previous?.fraudFlags ?? []),
+        ],
+        documentValid: data.documentValid ?? previous?.documentValid ?? false,
+        confidence: Math.max(
+          0,
+          Math.min(100, Number(data.confidence ?? previous?.confidence ?? 0))
+        ),
+        validationMessage:
+          data.validationMessage ?? previous?.validationMessage ?? "",
+      };
+
+      const documentResults = {
+        ...state.fraudAssessment.documentResults,
+        [documentKey]: result,
+      };
+
+      return {
+        fraudAssessment: {
+          ...state.fraudAssessment,
+          ...aggregateDocumentResults(documentResults),
+          documentResults,
+          assessmentCompleted: false,
+        },
+      };
+    }),
+
+  setFraudAssessmentCompleted: (completed) =>
+    set((state) => ({
+      fraudAssessment: {
+        ...state.fraudAssessment,
+        assessmentCompleted: completed,
       },
     })),
 
-  /* ---------------- SAVE APPROVED LOAN ---------------- */
-
-  saveApprovedLoan: (data) =>
+  resetFraudAssessment: () =>
     set({
-      approvedLoan: data,
-    }),
-
-  updateFraudAssessment: (data) =>
-    set({
-      fraudAssessment: data,
+      fraudAssessment: {
+        ...initialFraudAssessment,
+        fraudFlags: [],
+        documentResults: {},
+      },
     }),
 }));

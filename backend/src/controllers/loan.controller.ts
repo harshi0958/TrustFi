@@ -1,10 +1,67 @@
+
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { calculateRisk } from "../services/risk.service";
 
-export const applyLoan = async (req: Request, res: Response) => {
-  console.log("BODY:", req.body);
+/* ========================================================= */
+/* FRAUD INPUT NORMALIZATION */
+/* ========================================================= */
 
+const normalizeFraudInputs = (body: any) => {
+  const rawScore = body.fraudScore;
+  const rawRisk = body.fraudRisk;
+
+  const fraudScore =
+    rawScore !== undefined &&
+    rawScore !== null &&
+    rawScore !== "" &&
+    Number.isFinite(Number(rawScore))
+      ? Number(rawScore)
+      : undefined;
+
+  const fraudRisk:
+    | number
+    | "LOW"
+    | "MEDIUM"
+    | "HIGH"
+    | undefined =
+    typeof rawRisk === "string" &&
+    ["LOW", "MEDIUM", "HIGH"].includes(
+      rawRisk.toUpperCase()
+    )
+      ? (rawRisk.toUpperCase() as "LOW" | "MEDIUM" | "HIGH")
+      : rawRisk !== undefined &&
+          rawRisk !== null &&
+          rawRisk !== "" &&
+          Number.isFinite(Number(rawRisk))
+        ? Number(rawRisk)
+        : undefined;
+
+  const fraudFlags: string[] = Array.isArray(body.fraudFlags)
+    ? body.fraudFlags
+        .filter(
+          (flag: unknown): flag is string =>
+            typeof flag === "string" &&
+            flag.trim().length > 0
+        )
+        .map((flag: string) => flag.trim())
+    : [];
+
+  return {
+    fraudScore,
+    fraudRisk,
+    fraudFlags: [...new Set(fraudFlags)],
+  };
+};
+
+/* ========================================================= */
+/* APPLY LOAN */
+/* ========================================================= */
+
+export const applyLoan = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const {
       fullName,
@@ -20,24 +77,16 @@ export const applyLoan = async (req: Request, res: Response) => {
       documentsVerified,
       bankVerified,
 
-      // Fraud Detection
-      fraudRisk,
-      fraudFlags,
-
-      // Property Loan
       propertyType,
       propertyValue,
       propertyAddress,
       ownershipStatus,
 
-      // Gold Loan
       goldWeight,
       goldPurity,
       goldValue,
       goldOwnership,
     } = req.body;
-
-    /* ---------------- VALIDATION ---------------- */
 
     if (
       !fullName ||
@@ -58,8 +107,6 @@ export const applyLoan = async (req: Request, res: Response) => {
       });
     }
 
-    /* ---------------- LOAN TYPE VALIDATION ---------------- */
-
     const allowedLoanTypes = [
       "PERSONAL",
       "PROPERTY",
@@ -74,27 +121,66 @@ export const applyLoan = async (req: Request, res: Response) => {
       });
     }
 
-    /* ---------------- CREDIT / RISK / FRAUD ---------------- */
+    /* ---------------- NUMERIC VALIDATION ---------------- */
+
+    const income = Number(monthlyIncome);
+    const amount = Number(loanAmount);
+    const months = Number(loanMonths);
+    const suppliedCreditScore = Number(creditScore || 0);
+
+    if (
+      !Number.isFinite(income) ||
+      income <= 0 ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !Number.isInteger(months) ||
+      months <= 0 ||
+      !Number.isFinite(suppliedCreditScore)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Income, loan amount, duration, or credit score is invalid.",
+      });
+    }
+
+    if (
+      typeof documentsVerified !== "boolean" ||
+      typeof bankVerified !== "boolean"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Document and bank verification values must be boolean.",
+      });
+    }
+
+    const fraudInputs = normalizeFraudInputs(req.body);
+
+    if (
+      fraudInputs.fraudScore !== undefined &&
+      (
+        fraudInputs.fraudScore < 0 ||
+        fraudInputs.fraudScore > 100
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Fraud score must be between 0 and 100.",
+      });
+    }
+
+    /* ---------------- SERVER-SIDE RISK CALCULATION ---------------- */
 
     const score = calculateRisk({
-      monthlyIncome: Number(monthlyIncome),
-      loanAmount: Number(loanAmount),
-      loanMonths: Number(loanMonths),
-      creditScore: Number(creditScore || 0),
-
+      monthlyIncome: income,
+      loanAmount: amount,
+      loanMonths: months,
+      creditScore: suppliedCreditScore,
       occupation: String(occupation),
-      documentsVerified: Boolean(documentsVerified),
-      bankVerified: Boolean(bankVerified),
-
-      fraudRisk:
-        fraudRisk !== undefined
-          ? Number(fraudRisk)
-          : undefined,
-
-      fraudFlags:
-        Array.isArray(fraudFlags)
-          ? fraudFlags
-          : [],
+      documentsVerified,
+      bankVerified,
+      ...fraudInputs,
     });
 
     /* ---------------- CREATE LOAN ---------------- */
@@ -104,18 +190,11 @@ export const applyLoan = async (req: Request, res: Response) => {
         fullName,
         email,
         phone,
-
-        monthlyIncome: Number(monthlyIncome),
-
+        monthlyIncome: income,
         loanType,
-
-        loanAmount: Number(loanAmount),
-        loanMonths: Number(loanMonths),
+        loanAmount: amount,
+        loanMonths: months,
         purpose,
-
-        // =========================
-        // PROPERTY LOAN DETAILS
-        // =========================
 
         propertyType:
           loanType === "PROPERTY"
@@ -137,10 +216,6 @@ export const applyLoan = async (req: Request, res: Response) => {
             ? ownershipStatus || null
             : null,
 
-        // =========================
-        // GOLD LOAN DETAILS
-        // =========================
-
         goldWeight:
           loanType === "GOLD"
             ? Number(goldWeight || 0)
@@ -161,25 +236,12 @@ export const applyLoan = async (req: Request, res: Response) => {
             ? goldOwnership || null
             : null,
 
-        // =========================
-        // AI / RISK RESULT
-        // =========================
-
-        // IMPORTANT:
-        // Save the SERVER-CALCULATED score,
-        // not the client-supplied creditScore.
         creditScore: score.score,
-
         risk: score.risk,
         eligibility: score.eligibility,
         interestRate: score.interestRate,
 
-        // =========================
-        // FRAUD DETECTION
-        // =========================
-
         fraudScore: score.fraudScore,
-
         fraudRisk: score.fraudRisk,
 
         fraudFlags:
@@ -196,9 +258,7 @@ export const applyLoan = async (req: Request, res: Response) => {
       },
     });
 
-    /* ---------------- RESPONSE ---------------- */
-
-    return res.json({
+    return res.status(201).json({
       success: true,
       message: "Loan application submitted successfully.",
       loan,
@@ -221,13 +281,12 @@ export const applyLoan = async (req: Request, res: Response) => {
 
       riskReasons: score.riskReasons,
     });
-
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Loan Application Error:", error);
 
     return res.status(500).json({
       success: false,
-      error: error.message,
+      message: "Unable to submit the loan application.",
     });
   }
 };
@@ -241,21 +300,19 @@ export const getLoans = async (
   res: Response
 ) => {
   try {
-    const loans =
-      await prisma.loanApplication.findMany({
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+    const loans = await prisma.loanApplication.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
 
     return res.json(loans);
-
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Get Loans Error:", error);
 
     return res.status(500).json({
       success: false,
-      error: error.message,
+      message: "Unable to retrieve loan applications.",
     });
   }
 };
@@ -269,29 +326,31 @@ export const getLoanByEmail = async (
   res: Response
 ) => {
   try {
-    const email = String(req.params.email);
+    const email = String(req.params.email).trim();
 
-    const loan =
-      await prisma.loanApplication.findFirst({
-        where: {
-          email,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
+    const loan = await prisma.loanApplication.findFirst({
+      where: {
+        email,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: "No loan application found for this email.",
       });
+    }
 
     return res.json(loan);
-
-  } catch (error: any) {
-    console.error(
-      "Get Loan By Email Error:",
-      error
-    );
+  } catch (error: unknown) {
+    console.error("Get Loan By Email Error:", error);
 
     return res.status(500).json({
       success: false,
-      error: error.message,
+      message: "Unable to retrieve the loan application.",
     });
   }
 };
@@ -307,31 +366,43 @@ export const approveLoan = async (
   try {
     const id = String(req.params.id);
 
-    const loan =
-      await prisma.loanApplication.update({
-        where: {
-          id,
-        },
-        data: {
-          status: "APPROVED",
-        },
+    const existingLoan = await prisma.loanApplication.findUnique({
+      where: { id },
+    });
+
+    if (!existingLoan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan application not found.",
       });
+    }
+
+    if (existingLoan.fraudRisk === "HIGH") {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This application has high fraud risk and cannot be approved through this endpoint.",
+      });
+    }
+
+    const loan = await prisma.loanApplication.update({
+      where: { id },
+      data: {
+        status: "APPROVED",
+      },
+    });
 
     return res.json({
       success: true,
       message: "Loan approved successfully.",
       loan,
     });
-
-  } catch (error: any) {
-    console.error(
-      "Approve Loan Error:",
-      error
-    );
+  } catch (error: unknown) {
+    console.error("Approve Loan Error:", error);
 
     return res.status(500).json({
       success: false,
-      error: error.message,
+      message: "Unable to approve the loan application.",
     });
   }
 };
@@ -347,31 +418,35 @@ export const rejectLoan = async (
   try {
     const id = String(req.params.id);
 
-    const loan =
-      await prisma.loanApplication.update({
-        where: {
-          id,
-        },
-        data: {
-          status: "REJECTED",
-        },
+    const existingLoan = await prisma.loanApplication.findUnique({
+      where: { id },
+    });
+
+    if (!existingLoan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan application not found.",
       });
+    }
+
+    const loan = await prisma.loanApplication.update({
+      where: { id },
+      data: {
+        status: "REJECTED",
+      },
+    });
 
     return res.json({
       success: true,
       message: "Loan rejected successfully.",
       loan,
     });
-
-  } catch (error: any) {
-    console.error(
-      "Reject Loan Error:",
-      error
-    );
+  } catch (error: unknown) {
+    console.error("Reject Loan Error:", error);
 
     return res.status(500).json({
       success: false,
-      error: error.message,
+      message: "Unable to reject the loan application.",
     });
   }
 };
@@ -393,10 +468,6 @@ export const calculateLoanRisk = async (
       occupation,
       documentsVerified,
       bankVerified,
-
-      // Fraud Detection
-      fraudRisk,
-      fraudFlags,
     } = req.body;
 
     if (
@@ -409,48 +480,78 @@ export const calculateLoanRisk = async (
     ) {
       return res.status(400).json({
         success: false,
+        message: "Missing required risk assessment fields.",
+      });
+    }
+
+    const income = Number(monthlyIncome);
+    const amount = Number(loanAmount);
+    const months = Number(loanMonths);
+    const suppliedCreditScore = Number(creditScore || 0);
+
+    if (
+      !Number.isFinite(income) ||
+      income <= 0 ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !Number.isInteger(months) ||
+      months <= 0 ||
+      !Number.isFinite(suppliedCreditScore)
+    ) {
+      return res.status(400).json({
+        success: false,
         message:
-          "Missing required risk assessment fields.",
+          "Income, loan amount, duration, or credit score is invalid.",
+      });
+    }
+
+    if (
+      typeof documentsVerified !== "boolean" ||
+      typeof bankVerified !== "boolean"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Document and bank verification values must be boolean.",
+      });
+    }
+
+    const fraudInputs = normalizeFraudInputs(req.body);
+
+    if (
+      fraudInputs.fraudScore !== undefined &&
+      (
+        fraudInputs.fraudScore < 0 ||
+        fraudInputs.fraudScore > 100
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Fraud score must be between 0 and 100.",
       });
     }
 
     const result = calculateRisk({
-      monthlyIncome: Number(monthlyIncome),
-      loanAmount: Number(loanAmount),
-      loanMonths: Number(loanMonths),
-      creditScore: Number(creditScore || 0),
-
+      monthlyIncome: income,
+      loanAmount: amount,
+      loanMonths: months,
+      creditScore: suppliedCreditScore,
       occupation: String(occupation),
-      documentsVerified: Boolean(documentsVerified),
-      bankVerified: Boolean(bankVerified),
-
-      fraudRisk:
-        fraudRisk !== undefined
-          ? Number(fraudRisk)
-          : undefined,
-
-      fraudFlags:
-        Array.isArray(fraudFlags)
-          ? fraudFlags
-          : [],
+      documentsVerified,
+      bankVerified,
+      ...fraudInputs,
     });
 
     return res.json({
       success: true,
       risk: result,
     });
-
-  } catch (error: any) {
-    console.error(
-      "Risk Calculation Error:",
-      error
-    );
+  } catch (error: unknown) {
+    console.error("Risk Calculation Error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        error.message ||
-        "Risk calculation failed.",
+      message: "Risk calculation failed.",
     });
   }
 };

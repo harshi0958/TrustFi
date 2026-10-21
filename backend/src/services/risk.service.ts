@@ -7,8 +7,9 @@ export interface RiskInput {
   documentsVerified: boolean;
   bankVerified: boolean;
 
-  // Fraud detection inputs
-  fraudRisk?: number;
+    // Fraud detection inputs
+  fraudScore?: number;
+  fraudRisk?: number | "LOW" | "MEDIUM" | "HIGH";
   fraudFlags?: string[];
 }
 
@@ -34,6 +35,7 @@ export function calculateRisk(
   input: RiskInput
 ): RiskResult {
   let score = 300;
+  let fraudScore = input.fraudScore ?? 0;
 
   const riskReasons: string[] = [];
   const fraudFlags: string[] = [];
@@ -226,21 +228,7 @@ export function calculateRisk(
 
   /* ---------------- FRAUD DETECTION ---------------- */
 
-  let fraudScore = 0;
-
-  /*
-   * External fraud risk can come from
-   * document validation / OCR services.
-   */
-  if (
-    input.fraudRisk !== undefined &&
-    Number.isFinite(input.fraudRisk)
-  ) {
-    fraudScore = Math.min(
-      100,
-      Math.max(0, Math.round(input.fraudRisk))
-    );
-  }
+  /* FRAUD DETECTION */
 
   /* ---------------- FRAUD FLAGS ---------------- */
 
@@ -307,6 +295,16 @@ export function calculateRisk(
     fraudRiskLevel = "MEDIUM";
   } else {
     fraudRiskLevel = "LOW";
+  }
+
+    /* ---------------- FRAUD APPROVAL GUARD ---------------- */
+
+  if (fraudRiskLevel === "HIGH") {
+    approved = false;
+
+    riskReasons.push(
+      "High fraud risk prevents automatic approval and requires manual review."
+    );
   }
 
   /* ---------------- FRAUD EXPLANATION ---------------- */

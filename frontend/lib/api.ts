@@ -1,7 +1,44 @@
+
 const API = process.env.NEXT_PUBLIC_API_URL;
 
+function getApiUrl(path: string): string {
+  if (!API) {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL is missing. Check your frontend .env file."
+    );
+  }
+
+  return `${API.replace(/\/+$/, "")}${path}`;
+}
+
+async function readResponse<T = any>(res: Response): Promise<T> {
+  const text = await res.text();
+
+  let result: any;
+
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch {
+    result = {
+      message: text || "Invalid response received from server.",
+    };
+  }
+
+  if (!res.ok || result.success === false) {
+    throw new Error(
+      result.message ||
+        result.error ||
+        `API request failed with status ${res.status}.`
+    );
+  }
+
+  return result as T;
+}
+
+/* ---------------- APPLY LOAN ---------------- */
+
 export async function applyLoan(data: any) {
-  const res = await fetch(`${API}/api/loan/apply`, {
+  const res = await fetch(getApiUrl("/api/loan/apply"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -9,49 +46,77 @@ export async function applyLoan(data: any) {
     body: JSON.stringify(data),
   });
 
-  const text = await res.text();
-
-  console.log("Status:", res.status);
-  console.log("Response:", text);
-
-  if (!res.ok) {
-    throw new Error(text);
-  }
-
-  return JSON.parse(text);
+  return readResponse(res);
 }
+
+/* ---------------- DOCUMENT OCR ---------------- */
 
 export async function uploadDocument(file: File) {
   const form = new FormData();
-
   form.append("document", file);
 
-  const res = await fetch(`${API}/api/ocr/upload`, {
+  const res = await fetch(getApiUrl("/api/ocr/upload"), {
     method: "POST",
     body: form,
   });
 
-  return res.json();
+  return readResponse(res);
 }
+
+/* ---------------- GET LOANS ---------------- */
+
 export async function getLoans() {
-  const res = await fetch(`${API}/api/loan`);
-
-  return res.json();
+  const res = await fetch(getApiUrl("/api/loan"));
+  return readResponse(res);
 }
+
+/* ---------------- APPROVE LOAN ---------------- */
+
 export async function approveLoan(id: string) {
-  const res = await fetch(`${API}/api/loan/approve/${id}`, {
-    method: "PATCH",
-  });
+  const res = await fetch(
+    getApiUrl(`/api/loan/approve/${encodeURIComponent(id)}`),
+    { method: "PATCH" }
+  );
 
-  return res.json();
+  return readResponse(res);
 }
+
+/* ---------------- REJECT LOAN ---------------- */
+
+export async function rejectLoan(id: string) {
+  const res = await fetch(
+    getApiUrl(`/api/loan/reject/${encodeURIComponent(id)}`),
+    { method: "PATCH" }
+  );
+
+  return readResponse(res);
+}
+
+/* ---------------- GET LOAN BY EMAIL ---------------- */
+
 export async function getLoanByEmail(email: string) {
-  const res = await fetch(`${API}/api/loan/${email}`);
+  const res = await fetch(
+    getApiUrl(`/api/loan/${encodeURIComponent(email)}`)
+  );
 
-  return res.json();
+  return readResponse(res);
 }
-export async function calculateLoanRisk(data: any) {
-  const res = await fetch(`${API}/api/loan/risk`, {
+
+/* ---------------- CALCULATE LOAN RISK ---------------- */
+
+export async function calculateLoanRisk(data: {
+  monthlyIncome: number;
+  loanAmount: number;
+  loanMonths: number;
+  creditScore?: number;
+  occupation: string;
+  documentsVerified: boolean;
+  bankVerified: boolean;
+  fraudScore?: number;
+  fraudRisk?: number | "LOW" | "MEDIUM" | "HIGH";
+  fraudFlags?: string[];
+}) {
+  const res = await fetch(getApiUrl("/api/loan/risk"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -59,53 +124,36 @@ export async function calculateLoanRisk(data: any) {
     body: JSON.stringify(data),
   });
 
-  const result = await res.json();
-
-  console.log("Risk API Status:", res.status);
-  console.log("Risk API Response:", result);
-
-  if (!res.ok || !result.success) {
-    throw new Error(
-      result.message || "Risk calculation failed"
-    );
-  }
+  const result = await readResponse<{
+    success: boolean;
+    risk: any;
+  }>(res);
 
   return result.risk;
 }
+
+/* ---------------- ADMIN REGISTRATION ---------------- */
+
 export async function registerAdmin(
   name: string,
   email: string
 ) {
-  const res = await fetch(
-    `${API}/api/admin/register`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name,
-        email,
-      }),
-    }
-  );
+  const res = await fetch(getApiUrl("/api/admin/register"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name, email }),
+  });
 
-  const result = await res.json();
-
-  if (!res.ok || !result.success) {
-    throw new Error(
-      result.message ||
-        "Admin registration failed."
-    );
-  }
-
-  return result;
+  return readResponse(res);
 }
-export async function requestAdminOTP(
-  email: string
-) {
+
+/* ---------------- REQUEST ADMIN OTP ---------------- */
+
+export async function requestAdminOTP(email: string) {
   const res = await fetch(
-    `${API}/api/admin/request-otp`,
+    getApiUrl("/api/admin/request-otp"),
     {
       method: "POST",
       headers: {
@@ -115,77 +163,47 @@ export async function requestAdminOTP(
     }
   );
 
-  const result = await res.json();
-
-  if (!res.ok || !result.success) {
-    throw new Error(
-      result.message ||
-        "Failed to send OTP."
-    );
-  }
-
-  return result;
+  return readResponse(res);
 }
+
+/* ---------------- VERIFY ADMIN OTP ---------------- */
 
 export async function verifyAdminOTP(
   email: string,
   otp: string
 ) {
   const res = await fetch(
-    `${API}/api/admin/verify-otp`,
+    getApiUrl("/api/admin/verify-otp"),
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        email,
-        otp,
-      }),
+      body: JSON.stringify({ email, otp }),
     }
   );
 
-  const result = await res.json();
-
-  if (!res.ok || !result.success) {
-    throw new Error(
-      result.message ||
-        "OTP verification failed."
-    );
-  }
-
-  return result;
+  return readResponse(res);
 }
 
-export async function createPaymentOrder(
-  loanId: string
-) {
-  const API = process.env.NEXT_PUBLIC_API_URL;
+/* ---------------- CREATE RAZORPAY ORDER ---------------- */
 
+export async function createPaymentOrder(loanId: string) {
   const res = await fetch(
-    `${API}/api/payment/create-order`,
+    getApiUrl("/api/payment/create-order"),
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        loanId,
-      }),
+      body: JSON.stringify({ loanId }),
     }
   );
 
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(
-      data.message ||
-        "Failed to create payment order."
-    );
-  }
-
-  return data;
+  return readResponse(res);
 }
+
+/* ---------------- VERIFY RAZORPAY PAYMENT ---------------- */
 
 export async function verifyPayment(data: {
   loanId: string;
@@ -193,10 +211,8 @@ export async function verifyPayment(data: {
   razorpay_payment_id: string;
   razorpay_signature: string;
 }) {
-  const API = process.env.NEXT_PUBLIC_API_URL;
-
   const res = await fetch(
-    `${API}/api/payment/verify`,
+    getApiUrl("/api/payment/verify"),
     {
       method: "POST",
       headers: {
@@ -206,14 +222,5 @@ export async function verifyPayment(data: {
     }
   );
 
-  const result = await res.json();
-
-  if (!res.ok) {
-    throw new Error(
-      result.message ||
-        "Payment verification failed."
-    );
-  }
-
-  return result;
+  return readResponse(res);
 }

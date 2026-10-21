@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+
 import {
   BrainCircuit,
   Lock,
@@ -10,6 +12,7 @@ import {
   CreditCard,
   CheckCircle2,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 
 import { Progress } from "@/components/ui/progress";
@@ -18,13 +21,13 @@ import { calculateLoanRisk } from "@/lib/api";
 
 const steps = [
   "Preparing applicant financial data...",
-  "Verifying uploaded KYC documents...",
-  "Validating salary and banking records...",
-  "Preparing encrypted financial data...",
-  "Running AI credit scoring model...",
-  "Predicting repayment behaviour...",
+  "Checking required documents...",
+  "Validating applicant information...",
+  "Preparing financial data for analysis...",
+  "Running loan risk assessment...",
+  "Evaluating repayment capability...",
   "Calculating loan eligibility...",
-  "Generating confidential loan decision...",
+  "Generating assessment summary...",
 ];
 
 interface RiskResult {
@@ -37,152 +40,247 @@ interface RiskResult {
   emi: number;
 }
 
+const validRiskLevels = ["LOW", "MEDIUM", "HIGH"];
+
+function isValidRiskResult(value: unknown): value is RiskResult {
+  if (!value || typeof value !== "object") return false;
+
+  const result = value as Record<string, unknown>;
+
+  return (
+    Number.isFinite(Number(result.score)) &&
+    Number.isFinite(Number(result.eligibility)) &&
+    Number.isFinite(Number(result.interestRate)) &&
+    Number.isFinite(Number(result.eligibleAmount)) &&
+    Number.isFinite(Number(result.emi)) &&
+    typeof result.approved === "boolean" &&
+    typeof result.risk === "string" &&
+    Number(result.score) >= 0 &&
+    Number(result.score) <= 1000 &&
+    Number(result.eligibility) >= 0 &&
+    Number(result.eligibility) <= 100 &&
+    Number(result.interestRate) >= 0 &&
+    Number(result.eligibleAmount) >= 0 &&
+    Number(result.emi) >= 0
+  );
+}
+
 export default function AIProcessing() {
   const {
     nextStep,
     personal,
     loan,
     documents,
+    fraudAssessment,
     saveApprovedLoan,
   } = useLoanStore();
 
   const [progress, setProgress] = useState(0);
   const [current, setCurrent] = useState(0);
+  const [riskResult, setRiskResult] = useState<RiskResult | null>(null);
+  const [riskError, setRiskError] = useState("");
+  const [isAssessing, setIsAssessing] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
-  const [riskResult, setRiskResult] =
-    useState<RiskResult | null>(null);
+  // Prevent duplicate requests without cancelling a request
+  // whenever the component state changes.
+  const assessmentStartedRef = useRef(false);
+  const mountedRef = useRef(false);
 
-  const [riskError, setRiskError] =
-    useState("");
+  useEffect(() => {
+    mountedRef.current = true;
 
-  /*
-   * -----------------------------------------
-   * DOCUMENT VERIFICATION STATUS
-   * -----------------------------------------
-   */
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  const aadhaarVerified =
-    documents.aadhaarFront &&
-    documents.aadhaarBack;
+  // --------------------------------------------------
+  // DOCUMENT FILE PRESENCE
+  // File presence alone does not mean OCR verification.
+  // --------------------------------------------------
 
-  const panVerified =
-    documents.pan;
+  const aadhaarPresent = Boolean(
+    documents.aadhaarFront && documents.aadhaarBack
+  );
 
-  const salaryVerified =
-    documents.salarySlip;
+  const panPresent = Boolean(documents.pan);
+  const salaryPresent = Boolean(documents.salarySlip);
+  const bankPresent = Boolean(documents.passbook);
+  const selfiePresent = Boolean(documents.selfie);
 
-  const bankVerified =
-    documents.passbook;
+  const allDocumentsPresent = Boolean(
+    aadhaarPresent &&
+      panPresent &&
+      salaryPresent &&
+      bankPresent &&
+      selfiePresent
+  );
 
-  const selfieVerified =
-    documents.selfie;
+  // --------------------------------------------------
+  // FRAUD ASSESSMENT DATA
+  // This must be populated by the actual document
+  // validation/fraud assessment workflow.
+  // --------------------------------------------------
 
-  const allDocumentsVerified =
-    aadhaarVerified &&
-    panVerified &&
-    salaryVerified &&
-    bankVerified &&
-    selfieVerified;
+  const fraudScore = Number(fraudAssessment.fraudScore);
+  const fraudRisk = fraudAssessment.fraudRisk;
 
-  /*
-   * -----------------------------------------
-   * PROCESSING ANIMATION
-   * -----------------------------------------
-   */
+  const fraudFlags = Array.isArray(fraudAssessment.fraudFlags)
+    ? fraudAssessment.fraudFlags
+    : [];
+
+  const documentResults = fraudAssessment.documentResults ?? {};
+
+  const isValidatedDocument = (keyParts: string[]): boolean => {
+    const entry = Object.entries(documentResults).find(([key]) => {
+      const normalizedKey = key.toLowerCase();
+      return keyParts.every((part) => normalizedKey.includes(part));
+    });
+
+    if (!entry) return false;
+
+    const result = entry[1];
+
+    return (
+      result.documentValid === true &&
+      Number.isFinite(Number(result.confidence)) &&
+      Number(result.confidence) >= 70 &&
+      Number.isFinite(Number(result.fraudScore)) &&
+      validRiskLevels.includes(result.fraudRisk)
+    );
+  };
+
+  const aadhaarFrontValidated = isValidatedDocument([
+    "aadhaar",
+    "front",
+  ]);
+
+  const aadhaarBackValidated = isValidatedDocument([
+    "aadhaar",
+    "back",
+  ]);
+
+  const panValidated = isValidatedDocument(["pan"]);
+  const salaryValidated = isValidatedDocument(["salary"]);
+
+  const bankValidated =
+    isValidatedDocument(["passbook"]) ||
+    isValidatedDocument(["bank"]);
+
+  const extraLoanDocumentValidated =
+    loan.loanType === "PROPERTY"
+      ? isValidatedDocument(["property"])
+      : loan.loanType === "GOLD"
+        ? isValidatedDocument(["gold"])
+        : true;
+
+  const allDocumentsValidated = Boolean(
+    allDocumentsPresent &&
+      aadhaarFrontValidated &&
+      aadhaarBackValidated &&
+      panValidated &&
+      salaryValidated &&
+      bankValidated &&
+      extraLoanDocumentValidated
+  );
+
+  // A completed fraud assessment and validated required documents
+  // are both required before this gate can pass.
+  const fraudAssessmentCompleted = Boolean(
+    fraudAssessment.assessmentCompleted === true &&
+      allDocumentsValidated &&
+      Number.isFinite(fraudScore) &&
+      fraudScore >= 0 &&
+      fraudScore <= 100 &&
+      validRiskLevels.includes(fraudRisk)
+  );
+
+  // HIGH fraud risk must not be bypassed because a separate
+  // document-validation gate is incomplete.
+  const fraudBlocked =
+    fraudAssessment.assessmentCompleted === true &&
+    fraudRisk === "HIGH";
+
+  // --------------------------------------------------
+  // PROCESSING ANIMATION
+  // --------------------------------------------------
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
+      setProgress((previous) => {
+        if (previous >= 90) {
           clearInterval(interval);
-          return 100;
+          return 90;
         }
 
-        return Math.min(prev + 2, 100);
+        return Math.min(previous + 2, 90);
       });
     }, 120);
 
     return () => clearInterval(interval);
   }, []);
 
-  /*
-   * -----------------------------------------
-   * CURRENT PROCESSING STEP
-   * -----------------------------------------
-   */
-
   useEffect(() => {
-    const stepIndex = Math.min(
-      steps.length - 1,
-      Math.floor(progress / 13)
+    setCurrent(
+      Math.min(steps.length - 1, Math.floor(progress / 13))
     );
-
-    setCurrent(stepIndex);
   }, [progress]);
 
-  /*
-   * -----------------------------------------
-   * RUN ACTUAL AI RISK ENGINE
-   * -----------------------------------------
-   */
+  // --------------------------------------------------
+  // RUN LOAN RISK ASSESSMENT
+  // This is separate from the fraud assessment.
+  // --------------------------------------------------
 
   useEffect(() => {
-    if (progress < 90 || riskResult) {
+    if (
+      progress < 90 ||
+      !allDocumentsValidated ||
+      !fraudAssessmentCompleted ||
+      fraudBlocked ||
+      riskResult ||
+      assessmentStartedRef.current
+    ) {
       return;
     }
 
-    const runRiskAssessment = async () => {
+    assessmentStartedRef.current = true;
+
+    const runAssessment = async () => {
+      setIsAssessing(true);
+      setRiskError("");
+
       try {
-        setRiskError("");
+        const result = await calculateLoanRisk({
+          monthlyIncome: Number(personal.monthlyIncome || 0),
+          loanAmount: Number(loan.amount || 0),
+          loanMonths: Number(loan.months || 0),
 
-        const result =
-          await calculateLoanRisk({
-            monthlyIncome: Number(
-              personal.monthlyIncome || 0
-            ),
+          // Placeholder until a genuine credit-score source
+          // is integrated.
+          creditScore: 0,
 
-            loanAmount: Number(
-              loan.amount || 0
-            ),
+          occupation: personal.occupation || "",
 
-            loanMonths: Number(
-              loan.months || 0
-            ),
+          // Only validated documents should satisfy these flags.
+          documentsVerified: allDocumentsValidated,
+          bankVerified: bankValidated,
 
-            /*
-             * Credit score will be enhanced later
-             * with the complete AI scoring pipeline.
-             */
-            creditScore: 0,
+          // Forward the existing fraud assessment to the backend.
+          fraudScore,
+          fraudRisk,
+          fraudFlags,
+        });
 
-            occupation:
-              personal.occupation || "",
+        if (!mountedRef.current) return;
 
-            documentsVerified:
-              Boolean(
-                documents.aadhaarFront &&
-                documents.aadhaarBack &&
-                documents.pan &&
-                documents.selfie &&
-                documents.salarySlip &&
-                documents.passbook
-              ),
-
-            bankVerified:
-              Boolean(documents.passbook),
-          });
-
-        console.log(
-          "AI Risk Result:",
-          result
-        );
+        if (!isValidRiskResult(result)) {
+          throw new Error(
+            "The loan risk API returned invalid or incomplete data."
+          );
+        }
 
         setRiskResult(result);
-
-        /*
-         * Save AI result into Zustand.
-         * LoanApproval can use this result.
-         */
 
         saveApprovedLoan({
           amount: result.eligibleAmount,
@@ -191,107 +289,126 @@ export default function AIProcessing() {
           eligibility: result.eligibility,
           interestRate: result.interestRate,
           risk: result.risk,
-          status: result.approved
-            ? "APPROVED"
-            : "REJECTED",
+          status: result.approved ? "PENDING" : "REJECTED",
         });
 
-      } catch (error: any) {
-        console.error(
-          "AI Risk Assessment Error:",
-          error
-        );
+        setProgress(100);
+      } catch (error: unknown) {
+        if (!mountedRef.current) return;
 
         setRiskError(
-          error.message ||
-            "AI risk assessment failed."
+          error instanceof Error
+            ? error.message
+            : "Loan risk assessment failed. Please try again."
         );
+
+        // Allow the user to retry the request.
+        assessmentStartedRef.current = false;
+      } finally {
+        if (mountedRef.current) {
+          setIsAssessing(false);
+        }
       }
     };
 
-    runRiskAssessment();
+    void runAssessment();
   }, [
     progress,
+    allDocumentsValidated,
+    fraudAssessmentCompleted,
+    fraudBlocked,
     riskResult,
     personal.monthlyIncome,
     personal.occupation,
     loan.amount,
     loan.months,
-    documents.aadhaarFront,
-    documents.aadhaarBack,
-    documents.pan,
-    documents.selfie,
-    documents.salarySlip,
-    documents.passbook,
+    bankValidated,
+    fraudScore,
+    fraudRisk,
+    fraudFlags,
     saveApprovedLoan,
+    retryCount,
   ]);
 
-  /*
-   * -----------------------------------------
-   * MOVE TO APPROVAL
-   * -----------------------------------------
-   *
-   * Only move forward after risk calculation
-   * has completed successfully.
-   */
+  // --------------------------------------------------
+  // RETRY
+  // --------------------------------------------------
+
+  const retryAssessment = () => {
+    if (isAssessing) return;
+
+    assessmentStartedRef.current = false;
+    setRiskError("");
+    setRiskResult(null);
+    setProgress(90);
+    setRetryCount((previous) => previous + 1);
+  };
+
+  // --------------------------------------------------
+  // CONTINUE GATE
+  // --------------------------------------------------
+
+  const canContinue = Boolean(
+    progress === 100 &&
+      riskResult &&
+      allDocumentsValidated &&
+      fraudAssessmentCompleted &&
+      !fraudBlocked
+  );
 
   useEffect(() => {
-    if (
-      progress === 100 &&
-      riskResult
-    ) {
-      const timer = setTimeout(() => {
-        nextStep();
-      }, 1200);
+    if (!canContinue) return;
 
-      return () => clearTimeout(timer);
-    }
-  }, [
-    progress,
-    riskResult,
-    nextStep,
-  ]);
+    const timer = setTimeout(() => {
+      nextStep();
+    }, 1000);
 
-  /*
-   * -----------------------------------------
-   * PROCESSING CONFIDENCE
-   * -----------------------------------------
-   */
+    return () => clearTimeout(timer);
+  }, [canContinue, nextStep]);
 
-  const confidence =
+  // --------------------------------------------------
+  // DISPLAY STATUS
+  // --------------------------------------------------
+
+  const processingIndicator =
     progress < 40
-      ? 72
+      ? 35
       : progress < 70
-      ? 86
-      : progress < 100
-      ? 94
+        ? 65
+        : progress < 100
+          ? 85
+          : 100;
+
+  const riskStatus = !allDocumentsPresent
+    ? "Documents Required"
+    : !allDocumentsValidated
+      ? "Document Verification Required"
+      : !fraudAssessmentCompleted
+        ? "Fraud Assessment Required"
+        : fraudBlocked
+          ? "Manual Review Required"
+          : riskResult
+            ? "Loan Risk Assessment Complete"
+            : "Assessment In Progress";
+
+  const riskStatusColor = fraudBlocked
+    ? "text-red-400"
+    : !fraudAssessmentCompleted ||
+        !allDocumentsPresent ||
+        !allDocumentsValidated
+      ? "text-yellow-400"
       : riskResult
-      ? 98
-      : 94;
-
-  /*
-   * -----------------------------------------
-   * STATUS
-   * -----------------------------------------
-   */
-
-  const riskStatus =
-    allDocumentsVerified
-      ? "Analysis Ready"
-      : "Verification Required";
+        ? "text-green-400"
+        : "text-cyan-400";
 
   return (
     <div className="space-y-8">
-
-      {/* ---------------------------------- */}
       {/* HEADER */}
-      {/* ---------------------------------- */}
 
       <div className="text-center">
-
         <BrainCircuit
           size={60}
-          className="mx-auto text-cyan-400 animate-pulse"
+          className="mx-auto animate-pulse text-cyan-400"
         />
 
         <h2 className="mt-4 text-2xl font-bold text-white">
@@ -299,395 +416,439 @@ export default function AIProcessing() {
         </h2>
 
         <p className="mt-3 text-zinc-400">
-          TrustFi AI is securely analyzing your
-          financial information and loan profile.
+          TrustFi is evaluating the supplied financial information
+          and loan application.
         </p>
-
       </div>
 
-      {/* ---------------------------------- */}
       {/* APPLICATION SUMMARY */}
-      {/* ---------------------------------- */}
 
       <div className="rounded-2xl border border-cyan-500/20 bg-zinc-900 p-6">
-
         <h3 className="mb-4 text-lg font-semibold text-cyan-400">
           Application Summary
         </h3>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <SummaryItem
+            label="Applicant"
+            value={personal.fullName || "Applicant"}
+          />
 
-          <div>
-            <p className="text-sm text-zinc-500">
-              Applicant
-            </p>
+          <SummaryItem
+            label="Loan Type"
+            value={loan.loanType || "Not selected"}
+          />
 
-            <p className="mt-1 font-medium text-white">
-              {personal.fullName || "Applicant"}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-sm text-zinc-500">
-              Loan Type
-            </p>
-
-            <p className="mt-1 font-medium text-white">
-              {loan.loanType}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-sm text-zinc-500">
-              Requested Amount
-            </p>
-
-            <p className="mt-1 font-medium text-white">
-              ₹{" "}
-              {Number(
-                loan.amount || 0
-              ).toLocaleString("en-IN")}
-            </p>
-          </div>
-
+          <SummaryItem
+            label="Requested Amount"
+            value={`₹${Number(loan.amount || 0).toLocaleString("en-IN")}`}
+          />
         </div>
-
       </div>
 
-      {/* ---------------------------------- */}
-      {/* DOCUMENT VERIFICATION */}
-      {/* ---------------------------------- */}
+      {/* DOCUMENT FILES */}
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-
         <VerificationCard
           label="Aadhaar"
-          verified={aadhaarVerified}
+          verified={aadhaarPresent}
+          validated={aadhaarFrontValidated && aadhaarBackValidated}
         />
 
         <VerificationCard
           label="PAN"
-          verified={panVerified}
+          verified={panPresent}
+          validated={panValidated}
         />
 
         <VerificationCard
           label="Selfie"
-          verified={selfieVerified}
+          verified={selfiePresent}
         />
 
         <VerificationCard
           label="Salary"
-          verified={salaryVerified}
+          verified={salaryPresent}
+          validated={salaryValidated}
         />
 
         <VerificationCard
           label="Bank"
-          verified={bankVerified}
+          verified={bankPresent}
+          validated={bankValidated}
         />
-
       </div>
 
-      {/* ---------------------------------- */}
+      {!allDocumentsValidated && allDocumentsPresent && (
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-300">
+          Document files are present, but all required OCR validation
+          results have not passed yet. Complete the document validation
+          workflow before proceeding.
+        </div>
+      )}
+
       {/* PROGRESS */}
-      {/* ---------------------------------- */}
 
       <div className="rounded-2xl border border-cyan-500/20 bg-zinc-900 p-6">
-
         <div className="mb-4 flex items-center justify-between">
-
           <span className="text-sm text-zinc-400">
-            AI Processing
+            Assessment Processing
           </span>
 
           <span className="font-semibold text-cyan-400">
             {progress}%
           </span>
-
         </div>
 
-        <Progress
-          value={progress}
-          className="h-3"
-        />
+        <Progress value={progress} className="h-3" />
 
         <p className="mt-4 text-lg text-cyan-300">
-          {steps[current]}
+          {!allDocumentsPresent
+            ? "Complete the required document uploads..."
+            : !allDocumentsValidated
+              ? "Waiting for required document verification..."
+              : !fraudAssessmentCompleted
+                ? "Waiting for completed fraud assessment..."
+                : fraudBlocked
+                  ? "High fraud risk requires manual review..."
+                  : riskError
+                    ? "Assessment needs attention..."
+                    : isAssessing
+                      ? "Calculating loan risk and eligibility..."
+                      : riskResult
+                        ? "Loan risk calculation completed."
+                        : steps[current]}
         </p>
 
+        {!allDocumentsPresent && (
+          <p className="mt-2 text-sm text-yellow-400">
+            All required document files must be present before the
+            loan risk calculation can proceed.
+          </p>
+        )}
       </div>
 
-      {/* ---------------------------------- */}
-      {/* RISK RESULTS */}
-      {/* ---------------------------------- */}
+      {/* LOAN RISK RESULTS */}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-
-        {/* CREDIT SCORE */}
-
         <RiskCard
-          title="AI Credit Score"
-          value={
-            riskResult
-              ? String(riskResult.score)
-              : "Calculating..."
-          }
-          description="TrustFi risk score"
+          title="Credit Score"
+          value={riskResult ? String(riskResult.score) : "Pending"}
+          description="Score returned by the loan risk API"
         />
 
-        {/* RISK */}
-
         <RiskCard
-          title="Risk Level"
-          value={
-            riskResult
-              ? riskResult.risk
-              : "Calculating..."
-          }
-          description="AI assessed risk"
+          title="Loan Risk"
+          value={riskResult ? riskResult.risk : "Pending"}
+          description="Loan risk assessment result"
         />
 
-        {/* ELIGIBILITY */}
-
         <RiskCard
-          title="Loan Eligibility"
-          value={
-            riskResult
-              ? `${riskResult.eligibility}%`
-              : "Calculating..."
-          }
-          description="Eligibility percentage"
+          title="Eligibility"
+          value={riskResult ? `${riskResult.eligibility}%` : "Pending"}
+          description="Estimated eligibility percentage"
         />
-
-        {/* INTEREST */}
 
         <RiskCard
           title="Interest Rate"
           value={
-            riskResult
-              ? `${riskResult.interestRate}%`
-              : "Calculating..."
+            riskResult ? `${riskResult.interestRate}%` : "Pending"
           }
-          description="Annual interest rate"
+          description="Rate returned by the API"
         />
-
-        {/* EMI */}
 
         <RiskCard
           title="Estimated EMI"
           value={
             riskResult
-              ? `₹ ${riskResult.emi.toLocaleString(
-                  "en-IN"
-                )}`
-              : "Calculating..."
+              ? `₹${Number(riskResult.emi).toLocaleString("en-IN")}`
+              : "Pending"
           }
-          description="Monthly repayment"
+          description="Estimated monthly repayment"
         />
-
-        {/* ELIGIBLE AMOUNT */}
 
         <RiskCard
           title="Eligible Amount"
           value={
             riskResult
-              ? `₹ ${riskResult.eligibleAmount.toLocaleString(
-                  "en-IN"
-                )}`
-              : "Calculating..."
+              ? `₹${Number(riskResult.eligibleAmount).toLocaleString("en-IN")}`
+              : "Pending"
           }
-          description="Maximum eligible amount"
+          description="Amount returned by the API"
         />
-
       </div>
 
-      {/* ---------------------------------- */}
-      {/* AI PROCESSING METRICS */}
-      {/* ---------------------------------- */}
+      {/* FRAUD STATUS */}
+
+      <div
+        className={`rounded-2xl border p-6 ${
+          fraudBlocked
+            ? "border-red-500/30 bg-red-500/10"
+            : !fraudAssessmentCompleted
+              ? "border-yellow-500/30 bg-yellow-500/10"
+              : fraudRisk === "MEDIUM"
+                ? "border-yellow-500/30 bg-yellow-500/10"
+                : "border-green-500/20 bg-green-500/10"
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          {fraudBlocked || !fraudAssessmentCompleted ? (
+            <AlertTriangle
+              className={
+                fraudBlocked ? "text-red-400" : "text-yellow-400"
+              }
+              size={24}
+            />
+          ) : (
+            <ShieldCheck className="text-green-400" size={24} />
+          )}
+
+          <div>
+            <h3 className="text-lg font-semibold text-white">
+              Fraud Assessment
+            </h3>
+
+            <p className="mt-1 text-sm text-zinc-400">
+              Fraud status must come from the actual document-fraud
+              assessment, not from the credit-risk result.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <SummaryItem
+            label="Fraud Score"
+            value={
+              fraudAssessmentCompleted
+                ? `${fraudScore}/100`
+                : "Not assessed"
+            }
+          />
+
+          <SummaryItem
+            label="Fraud Risk Level"
+            value={
+              fraudAssessmentCompleted
+                ? fraudRisk
+                : fraudBlocked
+                  ? "HIGH — Manual review required"
+                  : "Assessment required"
+            }
+          />
+        </div>
+
+        {fraudFlags.length > 0 && (
+          <div className="mt-5">
+            <p className="mb-2 font-medium text-white">
+              Detected Flags
+            </p>
+
+            <ul className="space-y-2">
+              {fraudFlags.map((flag, index) => (
+                <li
+                  key={`${flag}-${index}`}
+                  className="flex items-start gap-2 text-sm text-zinc-300"
+                >
+                  <AlertTriangle
+                    size={16}
+                    className="mt-0.5 shrink-0 text-yellow-400"
+                  />
+                  <span>{flag}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {!fraudAssessmentCompleted && !fraudBlocked && (
+          <p className="mt-4 text-sm text-yellow-300">
+            Fraud assessment is not confirmed as complete. The
+            application will not automatically advance until a
+            successful fraud result and required document validations
+            are saved.
+          </p>
+        )}
+
+        {fraudBlocked && (
+          <p className="mt-4 text-sm font-medium text-red-300">
+            High fraud risk detected. Automatic progression is blocked
+            pending further review.
+          </p>
+        )}
+
+        {fraudAssessmentCompleted && fraudRisk === "MEDIUM" && (
+          <p className="mt-4 text-sm text-yellow-300">
+            Medium fraud risk detected. Follow the required review
+            policy before making a lending decision.
+          </p>
+        )}
+      </div>
+
+      {/* STATUS CARDS */}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <StatusCard
+          icon={<BrainCircuit />}
+          title="Processing Progress"
+          value={`${processingIndicator}%`}
+          description="Interface progress indicator, not AI confidence."
+        />
 
-        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-5">
+        <StatusCard
+          icon={<ShieldCheck />}
+          title="Verification Status"
+          value={riskStatus}
+          description="Reflects document and assessment requirements."
+          valueClass={riskStatusColor}
+        />
 
-          <div className="flex items-center gap-3">
+        <StatusCard
+          icon={<CreditCard />}
+          title="Loan Assessment"
+          value={`${loan.loanType || "Loan"} Application`}
+          description="Loan risk and eligibility calculation."
+          valueClass="text-yellow-400"
+        />
 
-            <BrainCircuit className="text-cyan-400" />
-
-            <p className="text-sm text-zinc-400">
-              AI Processing Confidence
-            </p>
-
-          </div>
-
-          <h2 className="mt-3 text-3xl font-bold text-cyan-400">
-            {confidence}%
-          </h2>
-
-        </div>
-
-        <div className="rounded-xl border border-green-500/20 bg-green-500/10 p-5">
-
-          <div className="flex items-center gap-3">
-
-            <ShieldCheck className="text-green-400" />
-
-            <p className="text-sm text-zinc-400">
-              Verification Status
-            </p>
-
-          </div>
-
-          <h2 className="mt-3 text-xl font-bold text-green-400">
-            {riskStatus}
-          </h2>
-
-        </div>
-
-        <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-5">
-
-          <div className="flex items-center gap-3">
-
-            <CreditCard className="text-yellow-400" />
-
-            <p className="text-sm text-zinc-400">
-              Loan Assessment
-            </p>
-
-          </div>
-
-          <h2 className="mt-3 text-xl font-bold text-yellow-400">
-            {loan.loanType} Loan
-          </h2>
-
-        </div>
-
-        <div className="rounded-xl border border-purple-500/20 bg-purple-500/10 p-5">
-
-          <div className="flex items-center gap-3">
-
-            <Lock className="text-purple-400" />
-
-            <p className="text-sm text-zinc-400">
-              Privacy Layer
-            </p>
-
-          </div>
-
-          <h2 className="mt-3 text-xl font-bold text-purple-400">
-            FHE Ready
-          </h2>
-
-        </div>
-
+        <StatusCard
+          icon={<Lock />}
+          title="Privacy Layer"
+          value="Implementation dependent"
+          description="FHE execution must be verified separately."
+          valueClass="text-purple-400"
+        />
       </div>
 
-      {/* ---------------------------------- */}
-      {/* RISK ERROR */}
-      {/* ---------------------------------- */}
+      {/* API ERROR */}
 
       {riskError && (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
-
           <div className="flex items-center gap-3">
-
-            <AlertTriangle
-              className="text-red-400"
-            />
+            <AlertTriangle className="text-red-400" />
 
             <h3 className="font-semibold text-red-400">
-              AI Risk Assessment Failed
+              Loan Risk Assessment Failed
             </h3>
-
           </div>
 
-          <p className="mt-2 text-sm text-red-300">
-            {riskError}
-          </p>
+          <p className="mt-2 text-sm text-red-300">{riskError}</p>
 
+          <button
+            type="button"
+            onClick={retryAssessment}
+            disabled={
+              isAssessing ||
+              !allDocumentsValidated ||
+              !fraudAssessmentCompleted ||
+              fraudBlocked
+            }
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-red-500/20 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw size={16} />
+            Retry Assessment
+          </button>
         </div>
       )}
 
-      {/* ---------------------------------- */}
-      {/* AI ANALYSIS ACTIVITIES */}
-      {/* ---------------------------------- */}
+      {/* ANALYSIS ACTIVITIES */}
 
       <div className="space-y-4">
-
         <AnalysisItem
           icon={<FileCheck />}
-          title="OCR Document Extraction"
-          description="Extracting information from uploaded documents."
-          completed={progress >= 20}
+          title="Required Document Files"
+          description="Checking whether required document files are present."
+          completed={allDocumentsPresent}
         />
 
         <AnalysisItem
           icon={<UserCheck />}
-          title="Identity Verification"
-          description="Checking applicant identity against submitted documents."
-          completed={progress >= 35}
+          title="Document OCR Validation"
+          description="Requires passing validation results for each required document."
+          completed={allDocumentsValidated}
         />
 
         <AnalysisItem
           icon={<CreditCard />}
           title="Financial Analysis"
-          description="Evaluating income, loan amount and financial records."
-          completed={progress >= 55}
+          description="Evaluating income, requested amount and repayment capability."
+          completed={Boolean(riskResult)}
         />
 
         <AnalysisItem
           icon={<Lock />}
-          title="Privacy-Preserving Analysis"
-          description="Preparing financial information for confidential processing."
-          completed={progress >= 75}
+          title="Privacy Processing"
+          description="FHE completion is not inferred from this interface."
+          completed={false}
         />
 
         <AnalysisItem
           icon={<ShieldCheck />}
-          title="AI Risk Assessment"
-          description="Calculating credit risk, eligibility and repayment capability."
-          completed={Boolean(riskResult)}
+          title="Fraud Assessment"
+          description="Requires a completed, valid fraud-assessment result."
+          completed={fraudAssessmentCompleted}
         />
-
       </div>
 
-      {/* ---------------------------------- */}
       {/* LIVE STATUS */}
-      {/* ---------------------------------- */}
 
-      <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-5">
-
-        <h2 className="text-lg font-semibold text-green-400">
-          Live AI Status
+      <div className="rounded-2xl border border-cyan-500/20 bg-zinc-900 p-5">
+        <h2 className="text-lg font-semibold text-cyan-400">
+          Live Assessment Status
         </h2>
 
         <p className="mt-2 text-zinc-300">
-          TrustFi is evaluating repayment capacity,
-          financial behaviour, document verification
-          and loan affordability.
+          {riskError
+            ? "The loan risk calculation failed and needs attention."
+            : !allDocumentsPresent
+              ? "Complete all required document uploads."
+              : !allDocumentsValidated
+                ? "Required document OCR validation is incomplete."
+                : !fraudAssessmentCompleted && !fraudBlocked
+                  ? "Fraud assessment must be completed separately."
+                  : fraudBlocked
+                    ? "High fraud risk requires review before proceeding."
+                    : riskResult
+                      ? "Loan risk calculation completed. All required gates passed."
+                      : "Evaluating the financial information."}
         </p>
 
-        {riskResult && (
-          <div className="mt-4 flex items-center gap-2 text-green-400">
-
-            <CheckCircle2 size={20} />
-
-            <span>
-              AI risk assessment completed successfully.
-            </span>
-
-          </div>
-        )}
-
+        {riskResult &&
+          fraudAssessmentCompleted &&
+          !fraudBlocked && (
+            <div className="mt-4 flex items-center gap-2 text-green-400">
+              <CheckCircle2 size={20} />
+              <span>Required assessment gates are satisfied.</span>
+            </div>
+          )}
       </div>
-
     </div>
   );
 }
 
-/*
- * -----------------------------------------
+/* -----------------------------------------
+ * SUMMARY ITEM
+ * ----------------------------------------- */
+
+function SummaryItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div>
+      <p className="text-sm text-zinc-500">{label}</p>
+      <p className="mt-1 break-words font-medium text-white">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/* -----------------------------------------
  * RISK CARD
- * -----------------------------------------
- */
+ * ----------------------------------------- */
 
 function RiskCard({
   title,
@@ -700,86 +861,103 @@ function RiskCard({
 }) {
   return (
     <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-5">
+      <p className="text-sm text-zinc-400">{title}</p>
 
-      <p className="text-sm text-zinc-400">
-        {title}
-      </p>
-
-      <h2 className="mt-2 text-2xl font-bold text-cyan-400">
+      <h2 className="mt-2 break-words text-2xl font-bold text-cyan-400">
         {value}
       </h2>
 
-      <p className="mt-1 text-xs text-zinc-500">
-        {description}
-      </p>
-
+      <p className="mt-1 text-xs text-zinc-500">{description}</p>
     </div>
   );
 }
 
-/*
- * -----------------------------------------
+/* -----------------------------------------
  * VERIFICATION CARD
- * -----------------------------------------
- */
+ * ----------------------------------------- */
 
 function VerificationCard({
   label,
   verified,
+  validated,
 }: {
   label: string;
   verified: boolean;
+  validated?: boolean;
 }) {
+  const borderClass = validated
+    ? "border-green-500/20 bg-green-500/10"
+    : verified
+      ? "border-yellow-500/20 bg-yellow-500/10"
+      : "border-zinc-700 bg-zinc-900";
+
+  const statusText = !verified
+    ? "Pending"
+    : validated
+      ? "OCR Verified"
+      : "File Present";
+
+  const statusColor = !verified
+    ? "text-zinc-400"
+    : validated
+      ? "text-green-400"
+      : "text-yellow-400";
+
   return (
-    <div
-      className={`rounded-xl border p-4 ${
-        verified
-          ? "border-green-500/20 bg-green-500/10"
-          : "border-yellow-500/20 bg-yellow-500/10"
-      }`}
-    >
-
+    <div className={`rounded-xl border p-4 ${borderClass}`}>
       <div className="flex items-center gap-2">
-
-        {verified ? (
-          <CheckCircle2
-            size={18}
-            className="text-green-400"
-          />
+        {validated ? (
+          <CheckCircle2 size={18} className="text-green-400" />
+        ) : verified ? (
+          <AlertTriangle size={18} className="text-yellow-400" />
         ) : (
-          <ShieldCheck
-            size={18}
-            className="text-yellow-400"
-          />
+          <ShieldCheck size={18} className="text-zinc-500" />
         )}
 
-        <span className="text-sm text-white">
-          {label}
-        </span>
-
+        <span className="text-sm text-white">{label}</span>
       </div>
 
-      <p
-        className={`mt-2 text-xs ${
-          verified
-            ? "text-green-400"
-            : "text-yellow-400"
-        }`}
-      >
-        {verified
-          ? "Verified"
-          : "Pending"}
-      </p>
-
+      <p className={`mt-2 text-xs ${statusColor}`}>{statusText}</p>
     </div>
   );
 }
 
-/*
- * -----------------------------------------
+/* -----------------------------------------
+ * STATUS CARD
+ * ----------------------------------------- */
+
+function StatusCard({
+  icon,
+  title,
+  value,
+  description,
+  valueClass = "text-cyan-400",
+}: {
+  icon: ReactNode;
+  title: string;
+  value: string;
+  description: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-cyan-500/20 bg-zinc-900 p-5">
+      <div className="flex items-center gap-3">
+        <span className="text-cyan-400">{icon}</span>
+        <p className="text-sm text-zinc-400">{title}</p>
+      </div>
+
+      <h2 className={`mt-3 break-words text-xl font-bold ${valueClass}`}>
+        {value}
+      </h2>
+
+      <p className="mt-1 text-xs text-zinc-500">{description}</p>
+    </div>
+  );
+}
+
+/* -----------------------------------------
  * ANALYSIS ITEM
- * -----------------------------------------
- */
+ * ----------------------------------------- */
 
 function AnalysisItem({
   icon,
@@ -787,43 +965,25 @@ function AnalysisItem({
   description,
   completed,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   description: string;
   completed: boolean;
 }) {
   return (
     <div className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-
-      <div
-        className={
-          completed
-            ? "text-green-400"
-            : "text-cyan-400"
-        }
-      >
+      <div className={completed ? "text-green-400" : "text-cyan-400"}>
         {icon}
       </div>
 
       <div className="flex-1">
-
-        <p className="font-medium text-white">
-          {title}
-        </p>
-
-        <p className="mt-1 text-sm text-zinc-500">
-          {description}
-        </p>
-
+        <p className="font-medium text-white">{title}</p>
+        <p className="mt-1 text-sm text-zinc-500">{description}</p>
       </div>
 
       {completed && (
-        <CheckCircle2
-          size={20}
-          className="text-green-400"
-        />
+        <CheckCircle2 size={20} className="text-green-400" />
       )}
-
     </div>
   );
 }

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useState } from "react";
@@ -25,6 +26,7 @@ export default function UploadCard({
   onValidation,
 }: Props) {
   const { updateFraudAssessment } = useLoanStore();
+
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -47,24 +49,18 @@ export default function UploadCard({
       const selected = acceptedFiles[0];
 
       /*
-       * -----------------------------------------
        * FILE SIZE VALIDATION
-       * -----------------------------------------
        */
 
       if (selected.size > 10 * 1024 * 1024) {
-        setValidationError(
-          "Maximum file size is 10 MB."
-        );
+        setValidationError("Maximum file size is 10 MB.");
         return;
       }
 
       /*
-       * -----------------------------------------
        * SELFIE VALIDATION
        *
-       * Selfie is NOT sent to OCR backend.
-       * -----------------------------------------
+       * Selfie is not sent to the OCR backend.
        */
 
       if (isSelfie) {
@@ -75,32 +71,34 @@ export default function UploadCard({
           return;
         }
 
-        setFile(selected);
-        setProgress(100);
-        setUploading(false);
-        setValidationError("");
-
-        onValidation?.({
+        const validationResult = onValidation?.({
           success: true,
           extractedText: {
             detectedType: "SELFIE",
             expectedType: "SELFIE",
             documentValid: true,
             confidence: 100,
-            validationMessage:
-              "Selfie uploaded successfully.",
+            validationMessage: "Selfie uploaded successfully.",
           },
         });
 
-        onUploaded?.();
+        if (validationResult === false) {
+          setFile(null);
+          setProgress(0);
+          return;
+        }
 
+        setFile(selected);
+        setProgress(100);
+        setUploading(false);
+        setValidationError("");
+
+        onUploaded?.();
         return;
       }
 
       /*
-       * -----------------------------------------
-       * NORMAL DOCUMENT
-       * -----------------------------------------
+       * NORMAL DOCUMENT UPLOAD
        */
 
       setFile(selected);
@@ -110,13 +108,10 @@ export default function UploadCard({
 
       try {
         /*
-         * -----------------------------------------
          * API URL
-         * -----------------------------------------
          */
 
-        const apiUrl =
-          process.env.NEXT_PUBLIC_API_URL;
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
         if (!apiUrl) {
           throw new Error(
@@ -125,27 +120,18 @@ export default function UploadCard({
         }
 
         /*
-         * -----------------------------------------
          * FORM DATA
-         * -----------------------------------------
          */
 
         const formData = new FormData();
 
-        formData.append(
-          "document",
-          selected
-        );
+        formData.append("document", selected);
+        formData.append("expectedType", documentType);
 
-        formData.append(
-          "expectedType",
-          documentType
-        );
+        setProgress(30);
 
         /*
-         * -----------------------------------------
          * OCR API
-         * -----------------------------------------
          */
 
         const response = await fetch(
@@ -156,115 +142,108 @@ export default function UploadCard({
           }
         );
 
+        setProgress(70);
+
         let result: any;
 
         try {
           result = await response.json();
         } catch {
-          throw new Error(
-            "Invalid response from server."
-          );
+          throw new Error("Invalid response from server.");
         }
 
-        console.log(
-          "OCR RESULT:",
-          result
-        );
+        console.log("OCR RESULT:", result);
 
-        /* -----------------------------------------
- * FRAUD ASSESSMENT
- * ----------------------------------------- */
-
-const fraudAssessment =
-  result?.fraudAssessment;
-
-const extractedFraud =
-  result?.extractedText;
-
-if (
-  fraudAssessment ||
-  extractedFraud
-) {
-  updateFraudAssessment({
-    fraudScore: Number(
-      fraudAssessment?.fraudScore ??
-        extractedFraud?.fraudRisk ??
-        0
-    ),
-
-    fraudRisk:
-      fraudAssessment?.fraudRisk ??
-      extractedFraud?.fraudRiskLevel ??
-      "LOW",
-
-    fraudFlags:
-      fraudAssessment?.fraudFlags ??
-      extractedFraud?.fraudFlags ??
-      [],
-  });
-}
         /*
-         * -----------------------------------------
-         * BACKEND VALIDATION
-         * -----------------------------------------
+         * BACKEND RESPONSE VALIDATION
          */
 
-        if (
-          !response.ok ||
-          !result.success
-        ) {
+        if (!response.ok || !result?.success) {
           setFile(null);
           setProgress(0);
 
           const message =
-            result?.extractedText
-              ?.validationMessage ||
+            result?.extractedText?.validationMessage ||
             result?.validationMessage ||
             result?.message ||
-            "Invalid document. Please upload the correct document.";
+            "Document upload or validation failed.";
 
           setValidationError(message);
-
           onValidation?.(result);
-
           return;
         }
 
         /*
-         * -----------------------------------------
-         * FRONTEND IDENTITY VALIDATION
-         *
-         * Aadhaar/PAN name matching etc.
-         * -----------------------------------------
+         * OCR DOCUMENT VALIDATION
          */
 
-        const validationResult =
+        const extracted = result?.extractedText;
+
+        if (!extracted || extracted.documentValid !== true) {
+          setFile(null);
+          setProgress(0);
+
+          setValidationError(
+            extracted?.validationMessage ||
+              "Document validation failed. Please upload a valid document."
+          );
+
           onValidation?.(result);
+          return;
+        }
+
+        /*
+         * APPLICANT IDENTITY VALIDATION
+         *
+         * Aadhaar/PAN name matching and other
+         * frontend identity checks happen here.
+         */
+
+        const validationResult = onValidation?.(result);
 
         if (validationResult === false) {
           setFile(null);
           setProgress(0);
-
           return;
         }
 
         /*
-         * -----------------------------------------
+         * SAVE FRAUD ASSESSMENT AFTER VALIDATION
+         */
+
+        const fraudAssessment = result?.fraudAssessment;
+
+        const flags =
+          fraudAssessment?.fraudFlags ??
+          extracted?.fraudFlags;
+
+        updateFraudAssessment({
+          fraudScore: Number(
+            fraudAssessment?.fraudScore ??
+              extracted?.fraudRisk ??
+              0
+          ),
+
+          fraudRisk:
+            fraudAssessment?.fraudRisk ??
+            extracted?.fraudRiskLevel ??
+            "LOW",
+
+          fraudFlags: Array.isArray(flags) ? flags : [],
+        });
+
+        /*
          * SUCCESS
-         * -----------------------------------------
+         *
+         * Keep the success section only once.
          */
 
         setProgress(100);
-
         setValidationError("");
 
         onUploaded?.();
-
       } catch (error) {
-        console.error(
-          "Document upload error:",
-          error
-        );
+        console.error("Document upload error:", error);
 
         setFile(null);
         setProgress(0);
@@ -277,10 +256,8 @@ if (
 
         onValidation?.({
           success: false,
-          message:
-            "Document verification failed.",
+          message: "Document verification failed.",
         });
-
       } finally {
         setUploading(false);
       }
@@ -290,6 +267,7 @@ if (
       isSelfie,
       onUploaded,
       onValidation,
+      updateFraudAssessment,
     ]
   );
 
@@ -346,16 +324,13 @@ if (
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-
       {/* TITLE */}
 
       <h3 className="mb-4 text-lg font-semibold text-white">
         {title}
       </h3>
 
-      {/* -----------------------------------------
-       * UPLOAD AREA
-       * ----------------------------------------- */}
+      {/* UPLOAD AREA */}
 
       {!file ? (
         <div
@@ -374,9 +349,7 @@ if (
           />
 
           <p className="mt-4 text-white">
-            {isDragActive
-              ? "Drop file here"
-              : "Drag & Drop"}
+            {isDragActive ? "Drop file here" : "Drag & Drop"}
           </p>
 
           <p className="text-sm text-zinc-500">
@@ -391,39 +364,27 @@ if (
         </div>
       ) : (
         <>
-          {/* -----------------------------------------
-           * FILE PREVIEW
-           * ----------------------------------------- */}
+          {/* FILE PREVIEW */}
 
           <FilePreview
             file={file}
             onRemove={removeFile}
           />
 
-          {/* -----------------------------------------
-           * PROGRESS
-           * ----------------------------------------- */}
+          {/* PROGRESS */}
 
-          <UploadProgress
-            progress={progress}
-          />
+          <UploadProgress progress={progress} />
 
-          {/* -----------------------------------------
-           * AI STATUS
-           * ----------------------------------------- */}
+          {/* AI STATUS */}
 
-          {progress === 100 &&
-            !validationError && (
-              <AIScanStatus />
-            )}
+          {progress === 100 && !validationError && (
+            <AIScanStatus />
+          )}
 
-          {/* -----------------------------------------
-           * ERROR
-           * ----------------------------------------- */}
+          {/* ERROR */}
 
           {validationError && (
             <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-
               <p className="text-sm font-semibold text-red-400">
                 Document Verification Failed
               </p>
@@ -439,19 +400,15 @@ if (
               >
                 Upload Again
               </button>
-
             </div>
           )}
         </>
       )}
 
-      {/* -----------------------------------------
-       * UPLOAD ERROR WHEN NO FILE EXISTS
-       * ----------------------------------------- */}
+      {/* UPLOAD ERROR WHEN NO FILE EXISTS */}
 
       {!file && validationError && (
         <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-
           <p className="text-sm font-semibold text-red-400">
             Upload Failed
           </p>
@@ -462,17 +419,13 @@ if (
 
           <button
             type="button"
-            onClick={() =>
-              setValidationError("")
-            }
+            onClick={() => setValidationError("")}
             className="mt-3 rounded-lg bg-red-500/20 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/30"
           >
             Try Again
           </button>
-
         </div>
       )}
-
     </div>
   );
 }
