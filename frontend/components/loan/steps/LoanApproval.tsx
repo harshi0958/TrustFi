@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle,
@@ -15,6 +15,10 @@ import { Button } from "@/components/ui/button";
 import { useLoanStore } from "@/store/loanStore";
 import { calculateCredit } from "@/lib/creditEngine";
 import { applyLoan } from "@/lib/api";
+import {
+  canStartLoanSubmission,
+  isHighFraudRiskBlocked,
+} from "@/lib/underwriting";
 
 export default function LoanApproval() {
   const router = useRouter();
@@ -23,63 +27,75 @@ export default function LoanApproval() {
     personal,
     loan,
     documents,
+    propertyDocumentUploadId,
     saveApprovedLoan,
     fraudAssessment,
   } = useLoanStore();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionSucceeded, setSubmissionSucceeded] = useState(false);
+  const submissionLock = useRef(false);
 
   // --------------------------------------------------
   // DOCUMENT PRESENCE CHECK
   // File presence alone does not prove OCR verification.
   // --------------------------------------------------
 
-  const documentsVerified = Boolean(
+  const requiredDocumentFilesPresent = Boolean(
     documents.aadhaarFront &&
       documents.aadhaarBack &&
       documents.pan &&
       documents.selfie &&
       documents.salarySlip &&
-      documents.passbook
+      documents.passbook &&
+      (loan.loanType === "PROPERTY"
+        ? documents.propertyDocument
+        : loan.loanType === "GOLD"
+          ? documents.goldDocument
+          : true)
   );
 
-  const bankVerified = Boolean(documents.passbook);
+  const documentResults = fraudAssessment?.documentResults ?? {};
 
+  const isValidatedDocument = (keyParts: string[]) => {
+    const entry = Object.entries(documentResults).find(([key]) => {
+      const normalizedKey = key.toLowerCase();
+      return keyParts.every((part) => normalizedKey.includes(part));
+    });
 
-  
-const documentResults = fraudAssessment?.documentResults ?? {};
+    if (!entry) return false;
 
-const isValidatedDocument = (keyParts: string[]) => {
-  const entry = Object.entries(documentResults).find(([key]) => {
-    const normalizedKey = key.toLowerCase();
-    return keyParts.every((part) => normalizedKey.includes(part));
-  });
+    const item = entry[1];
 
-  if (!entry) return false;
+    return (
+      item.documentValid === true &&
+      typeof item.confidence === "number" &&
+      Number.isFinite(item.confidence) &&
+      item.confidence >= 70 &&
+      typeof item.fraudScore === "number" &&
+      Number.isFinite(item.fraudScore) &&
+      ["LOW", "MEDIUM", "HIGH"].includes(item.fraudRisk)
+    );
+  };
 
-  const item = entry[1];
-
-  return (
-    item.documentValid === true &&
-    Number(item.confidence) >= 70 &&
-    Number.isFinite(Number(item.fraudScore)) &&
-    ["LOW", "MEDIUM", "HIGH"].includes(item.fraudRisk)
+  const allRequiredDocumentsOCRVerified = Boolean(
+    isValidatedDocument(["aadhaar", "front"]) &&
+      isValidatedDocument(["aadhaar", "back"]) &&
+      isValidatedDocument(["pan"]) &&
+      isValidatedDocument(["salary"]) &&
+      (isValidatedDocument(["passbook"]) ||
+        isValidatedDocument(["bank"])) &&
+      (loan.loanType === "PROPERTY"
+        ? isValidatedDocument(["property"])
+        : loan.loanType === "GOLD"
+          ? isValidatedDocument(["gold"])
+          : true)
   );
-};
 
-const allRequiredDocumentsOCRVerified = Boolean(
-  isValidatedDocument(["aadhaar", "front"]) &&
-    isValidatedDocument(["aadhaar", "back"]) &&
-    isValidatedDocument(["pan"]) &&
-    isValidatedDocument(["salary"]) &&
-    (isValidatedDocument(["passbook"]) ||
-      isValidatedDocument(["bank"])) &&
-    (loan.loanType === "PROPERTY"
-      ? isValidatedDocument(["property"])
-      : loan.loanType === "GOLD"
-        ? isValidatedDocument(["gold"])
-        : true)
-);
+  const bankVerified =
+    isValidatedDocument(["passbook"]) ||
+    isValidatedDocument(["bank"]);
+  const documentsVerified = allRequiredDocumentsOCRVerified;
 
   // --------------------------------------------------
   // FRAUD ASSESSMENT VALIDATION
@@ -106,7 +122,10 @@ const validFraudAssessment =
   ["LOW", "MEDIUM", "HIGH"].includes(fraudRisk);
 
 
-  const highFraudRisk = fraudRisk === "HIGH";
+  const highFraudRisk = isHighFraudRiskBlocked(
+    assessmentCompleted,
+    fraudRisk
+  );
 
   // --------------------------------------------------
   // CREDIT ELIGIBILITY ESTIMATE
@@ -119,10 +138,8 @@ const validFraudAssessment =
       loanAmount: Number(loan.amount || 0),
       months: Number(loan.months || 0),
       occupation: personal.occupation || "",
-      documentsVerified: allRequiredDocumentsOCRVerified,
-bankVerified:
-  isValidatedDocument(["passbook"]) ||
-  isValidatedDocument(["bank"]),
+      documentsVerified,
+      bankVerified,
     });
   }, [
     personal.monthlyIncome,
@@ -147,7 +164,7 @@ bankVerified:
       interestRate: result.interestRate,
       risk: result.risk,
       status:
-        result.approved && validFraudAssessment && !highFraudRisk
+        !validFraudAssessment || highFraudRisk || result.approved
           ? "PENDING"
           : "REJECTED",
     });
@@ -218,7 +235,7 @@ bankVerified:
       return false;
     }
 
-    if (!documentsVerified) {
+    if (!requiredDocumentFilesPresent) {
       alert(
         "Please upload all required documents before submitting."
       );
@@ -227,6 +244,11 @@ bankVerified:
 
     // PROPERTY LOAN VALIDATION
     if (loan.loanType === "PROPERTY") {
+      if (!propertyDocumentUploadId) {
+        alert("Please upload the property document before submitting.");
+        return false;
+      }
+
       if (!loan.propertyType) {
         alert("Please select the property type.");
         return false;
@@ -283,33 +305,24 @@ bankVerified:
     return true;
 
   };
-  
-if (!allRequiredDocumentsOCRVerified) {
-  alert(
-    "Required document OCR validation is incomplete. Please review your uploaded documents."
-  );
-  return;
-}
-
-
   // --------------------------------------------------
   // SUBMIT APPLICATION
   // --------------------------------------------------
 
   const submitLoan = async () => {
-    if (isSubmitting) return;
-
-    if (!validateApplication()) return;
-
-    // Never allow submission without a completed assessment.
-    if (!validFraudAssessment) {
-      alert(
-        "Fraud assessment is incomplete or invalid. Please return to AI Review and complete the assessment."
-      );
+    if (
+      !canStartLoanSubmission(
+        submissionLock.current,
+        isSubmitting,
+        submissionSucceeded
+      )
+    ) {
       return;
     }
 
-    // Block high-risk applications from this submission flow.
+    if (!validateApplication()) return;
+
+    // A completed high-risk assessment remains a submission restriction.
     if (highFraudRisk) {
       alert(
         "Loan submission blocked because HIGH fraud risk was detected. Further review is required."
@@ -317,12 +330,14 @@ if (!allRequiredDocumentsOCRVerified) {
       return;
     }
 
-    if (!result.approved) {
+    if (!result.approved && allRequiredDocumentsOCRVerified) {
       alert(
         "Your current eligibility estimate does not meet the approval criteria. The application cannot be submitted through this flow."
       );
       return;
     }
+
+    submissionLock.current = true;
 
     try {
       setIsSubmitting(true);
@@ -360,6 +375,10 @@ if (!allRequiredDocumentsOCRVerified) {
           loan.loanType === "PROPERTY"
             ? loan.ownershipStatus
             : null,
+        propertyDocumentUploadId:
+          loan.loanType === "PROPERTY"
+            ? propertyDocumentUploadId
+            : null,
 
         // GOLD LOAN DETAILS
         goldWeight:
@@ -382,14 +401,15 @@ if (!allRequiredDocumentsOCRVerified) {
             ? loan.goldOwnership
             : null,
 
-        // CREDIT ESTIMATE
-        creditScore: Number(result.score || 0),
-
-        // FRAUD ASSESSMENT
-        fraudScore,
-        fraudRisk,
-        fraudFlags: [...fraudFlags],
-        assessmentCompleted: true,
+        // Only send OCR-derived fraud data when the assessment is complete.
+        ...(validFraudAssessment
+          ? {
+              fraudScore,
+              fraudRisk,
+              fraudFlags: [...fraudFlags],
+            }
+          : {}),
+        assessmentCompleted: validFraudAssessment,
 
         // VERIFICATION INDICATORS
         documentsVerified,
@@ -397,18 +417,28 @@ if (!allRequiredDocumentsOCRVerified) {
       };
 
       // Do not log applicant PII or financial documents.
-      const response = await applyLoan(loanPayload);
+      const submission = await applyLoan(loanPayload);
 
-      // Persist dashboard lookup key only after API success.
-      localStorage.setItem("loanEmail", personal.email);
+      setSubmissionSucceeded(true);
 
       alert(
-        "Loan application submitted successfully. Final approval is subject to lender review."
+        `Loan application submitted successfully for manual review. Reference: ${submission.loan.id}. Final approval is subject to lender review.`
       );
+
+      try {
+        // Dashboard lookup remains best-effort after confirmed persistence.
+        localStorage.setItem("loanEmail", personal.email);
+      } catch (storageError: unknown) {
+        console.error(
+          "Loan application was saved, but the dashboard lookup could not be stored:",
+          storageError
+        );
+      }
 
       router.push("/dashboard");
     } catch (err: unknown) {
-      console.error("Loan application submission failed.");
+      submissionLock.current = false;
+      console.error("Loan application submission failed.", err);
 
       const message =
         err instanceof Error
@@ -447,10 +477,10 @@ if (!allRequiredDocumentsOCRVerified) {
       {/* FRAUD STATUS */}
       <div
         className={`rounded-2xl border p-5 ${
-          !validFraudAssessment
-            ? "border-amber-500/30 bg-amber-500/10"
-            : highFraudRisk
-              ? "border-red-500/30 bg-red-500/10"
+          highFraudRisk
+            ? "border-red-500/30 bg-red-500/10"
+            : !validFraudAssessment
+              ? "border-amber-500/30 bg-amber-500/10"
               : "border-green-500/30 bg-green-500/10"
         }`}
       >
@@ -466,10 +496,28 @@ if (!allRequiredDocumentsOCRVerified) {
               Fraud Assessment
             </h2>
 
-            {!validFraudAssessment ? (
+            {highFraudRisk ? (
+              <>
+                <p className="mt-1 text-sm text-red-300">
+                  Completed HIGH fraud risk assessment. Submission is blocked;
+                  further review is required.
+                </p>
+                <p className="mt-2 text-sm text-zinc-300">
+                  Risk level: {fraudRisk} · Score: {fraudScore}/100
+                </p>
+                {fraudFlags.length > 0 && (
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-zinc-300">
+                    {fraudFlags.map((flag, index) => (
+                      <li key={`${flag}-${index}`}>{flag}</li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : !validFraudAssessment ? (
               <p className="mt-1 text-sm text-zinc-300">
-                Assessment incomplete. Loan submission is disabled
-                until a valid assessment is completed.
+                Assessment incomplete. The application can be submitted
+                for review, but this is not a completed fraud or document
+                authenticity check.
               </p>
             ) : (
               <>
@@ -504,7 +552,7 @@ if (!allRequiredDocumentsOCRVerified) {
         />
 
         <Card
-          title="Estimated Credit Score"
+          title="Estimated Risk Score"
           value={result.score}
         />
 
@@ -536,10 +584,10 @@ if (!allRequiredDocumentsOCRVerified) {
         <Card
           title="Application Status"
           value={
-            !validFraudAssessment
-              ? "Assessment Pending"
-              : highFraudRisk
-                ? "Review Required"
+            highFraudRisk
+              ? "Review Required"
+              : !validFraudAssessment
+                ? "Pending Review"
                 : result.approved
                   ? "Ready to Submit"
                   : "Eligibility Not Met"
@@ -582,12 +630,12 @@ if (!allRequiredDocumentsOCRVerified) {
 
           <StatusRow
             label="All required document files present"
-            complete={documentsVerified}
+            complete={requiredDocumentFilesPresent}
           />
 
           
 <StatusRow
-  label="Required documents passed OCR validation"
+  label="Required documents passed OCR type checks (not authenticity verification)"
   complete={allRequiredDocumentsOCRVerified}
 />
 
@@ -644,11 +692,13 @@ if (!allRequiredDocumentsOCRVerified) {
           className="bg-cyan-500 text-black hover:bg-cyan-400"
           onClick={submitLoan}
           disabled={
-            isSubmitting ||
-            !documentsVerified ||
-            !validFraudAssessment ||
+            !canStartLoanSubmission(
+              false,
+              isSubmitting,
+              submissionSucceeded
+            ) ||
             highFraudRisk ||
-            !result.approved
+            (allRequiredDocumentsOCRVerified && !result.approved)
           }
         >
           {isSubmitting ? (
@@ -657,7 +707,9 @@ if (!allRequiredDocumentsOCRVerified) {
               Submitting Application...
             </span>
           ) : (
-            "Submit Loan Application"
+            validFraudAssessment
+              ? "Submit Loan Application"
+              : "Submit Application for Manual Review"
           )}
         </Button>
       </div>

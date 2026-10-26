@@ -5,7 +5,7 @@ import { useLoanStore } from "@/store/loanStore";
 export default function ProgressCard() {
   const currentStep = useLoanStore((state) => state.currentStep);
 
-  const percentage = Math.round((currentStep / 8) * 100);
+  const percentage = Math.round((currentStep / 7) * 100);
 
   return (
     <div className="rounded-2xl border border-cyan-500/20 bg-zinc-900 p-6">

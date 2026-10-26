@@ -105,7 +105,7 @@ export function calculateRisk(
   if (input.documentsVerified) {
     score += 120;
     riskReasons.push(
-      "Required documents have been successfully verified."
+      "Required documents passed OCR document-type checks; authenticity is not confirmed."
     );
   } else {
     riskReasons.push(
@@ -118,7 +118,7 @@ export function calculateRisk(
   if (input.bankVerified) {
     score += 80;
     riskReasons.push(
-      "Bank information has been successfully verified."
+      "The bank document passed OCR document-type checks; account ownership is not confirmed."
     );
   } else {
     riskReasons.push(

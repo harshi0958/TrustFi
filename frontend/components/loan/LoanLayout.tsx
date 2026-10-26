@@ -15,7 +15,6 @@ import LoanDetails from "./steps/LoanDetails";
 import DocumentUpload from "./steps/DocumentUpload";
 import AIProcessing from "./steps/AIProcessing";
 import LoanApproval from "./steps/LoanApproval";
-// Fallback placeholder for LoanApproval step. The original module was missing.
 
 
 export default function LoanLayout() {
@@ -37,8 +36,11 @@ export default function LoanLayout() {
             {currentStep === 4 && <BankingDetails />}
             {currentStep === 5 && <LoanDetails />}
             {currentStep === 6 && <DocumentUpload />}
-            {currentStep === 7 && <AIProcessing />}
-            {currentStep === 8 && <LoanApproval />}
+            {currentStep === 7 && (
+              <AIProcessing>
+                <LoanApproval />
+              </AIProcessing>
+            )}
           </div>
         </div>
 

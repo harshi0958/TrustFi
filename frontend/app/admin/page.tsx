@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminFetch } from "@/lib/adminApi";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -14,6 +13,7 @@ export default function AdminPage() {
 
   const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   // =========================
   // AUTH CHECK
@@ -36,11 +36,13 @@ export default function AdminPage() {
   const loadDashboard = async () => {
     try {
       setLoading(true);
+      setLoadError("");
 
-      const res = await fetch(`${API}/api/admin/dashboard`);
+      const res = await adminFetch("/api/admin/dashboard");
 
       if (!res.ok) {
-        throw new Error("Failed to load dashboard");
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to load dashboard.");
       }
 
       const data = await res.json();
@@ -48,6 +50,9 @@ export default function AdminPage() {
       setDashboard(data);
     } catch (error) {
       console.error("Dashboard error:", error);
+      setLoadError(
+        error instanceof Error ? error.message : "Failed to load dashboard."
+      );
     } finally {
       setLoading(false);
     }
@@ -64,7 +69,7 @@ export default function AdminPage() {
   // =========================
   const approveLoan = async (id: string) => {
     try {
-      await fetch(`${API}/api/loan/approve/${id}`, {
+      await adminFetch(`/api/loan/approve/${encodeURIComponent(id)}`, {
         method: "PATCH",
       });
 
@@ -79,7 +84,7 @@ export default function AdminPage() {
   // =========================
   const rejectLoan = async (id: string) => {
     try {
-      await fetch(`${API}/api/loan/reject/${id}`, {
+      await adminFetch(`/api/loan/reject/${encodeURIComponent(id)}`, {
         method: "PATCH",
       });
 
@@ -121,6 +126,26 @@ export default function AdminPage() {
 
   if (!isAuthenticated) {
     return null;
+  }
+
+  if (loadError && !dashboard) {
+    return (
+      <div className="min-h-screen bg-[#050816] text-white">
+        <AdminSidebar />
+        <main className="ml-64 flex min-h-screen items-center justify-center px-6">
+          <div className="max-w-lg text-center">
+            <p className="text-red-300">{loadError}</p>
+            <button
+              type="button"
+              onClick={loadDashboard}
+              className="mt-5 rounded-lg bg-cyan-500 px-5 py-2 font-semibold text-slate-950"
+            >
+              Retry
+            </button>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   // =========================
@@ -196,6 +221,19 @@ export default function AdminPage() {
 
       {/* ================= MAIN ================= */}
       <main className="max-w-7xl mx-auto px-6 py-10">
+
+        {loadError && (
+          <div className="mb-6 flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">
+            <p>{loadError}</p>
+            <button
+              type="button"
+              onClick={loadDashboard}
+              className="font-semibold underline"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* TITLE */}
 
@@ -408,7 +446,7 @@ export default function AdminPage() {
                   </th>
 
                   <th className="px-6 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
-                    Credit Score
+                    Risk Score
                   </th>
 
                   <th className="px-6 py-4 text-center text-xs uppercase tracking-wider text-gray-500">

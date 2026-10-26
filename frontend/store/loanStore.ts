@@ -96,6 +96,7 @@ interface LoanStore {
   banking: BankingDetails;
   loan: LoanDetails;
   documents: UploadedDocuments;
+  propertyDocumentUploadId: string | null;
   approvedLoan: ApprovedLoan;
   fraudAssessment: FraudAssessment;
 
@@ -108,6 +109,7 @@ interface LoanStore {
   updateBanking: (data: Partial<BankingDetails>) => void;
   updateLoan: (data: Partial<LoanDetails>) => void;
   updateDocument: (key: keyof UploadedDocuments, value: boolean) => void;
+  setPropertyDocumentUploadId: (uploadId: string | null) => void;
   saveApprovedLoan: (data: ApprovedLoan) => void;
 
   updateFraudAssessment: (data: Partial<FraudAssessment>) => void;
@@ -115,6 +117,7 @@ interface LoanStore {
     documentKey: string,
     data: Partial<DocumentFraudResult>
   ) => void;
+  clearDocumentFraudAssessment: (documentKey: string) => void;
   setFraudAssessmentCompleted: (completed: boolean) => void;
   resetFraudAssessment: () => void;
 }
@@ -191,6 +194,7 @@ export const useLoanStore = create<LoanStore>((set) => ({
     propertyDocument: false,
     goldDocument: false,
   },
+  propertyDocumentUploadId: null,
 
   identity: {
     aadhaarFront: null,
@@ -239,11 +243,11 @@ export const useLoanStore = create<LoanStore>((set) => ({
   },
 
   setCurrentStep: (step) =>
-    set({ currentStep: Math.min(8, Math.max(1, step)) }),
+    set({ currentStep: Math.min(7, Math.max(1, step)) }),
 
   nextStep: () =>
     set((state) => ({
-      currentStep: Math.min(8, state.currentStep + 1),
+      currentStep: Math.min(7, state.currentStep + 1),
     })),
 
   previousStep: () =>
@@ -275,6 +279,9 @@ export const useLoanStore = create<LoanStore>((set) => ({
     set((state) => ({
       documents: { ...state.documents, [key]: value },
     })),
+
+  setPropertyDocumentUploadId: (uploadId) =>
+    set({ propertyDocumentUploadId: uploadId }),
 
   saveApprovedLoan: (data) => set({ approvedLoan: data }),
 
@@ -335,13 +342,69 @@ export const useLoanStore = create<LoanStore>((set) => ({
       };
     }),
 
+  clearDocumentFraudAssessment: (documentKey) =>
+    set((state) => {
+      const documentResults = {
+        ...state.fraudAssessment.documentResults,
+      };
+      delete documentResults[documentKey];
+
+      return {
+        fraudAssessment: {
+          ...state.fraudAssessment,
+          ...aggregateDocumentResults(documentResults),
+          documentResults,
+          assessmentCompleted: false,
+        },
+      };
+    }),
+
   setFraudAssessmentCompleted: (completed) =>
-    set((state) => ({
-      fraudAssessment: {
-        ...state.fraudAssessment,
-        assessmentCompleted: completed,
-      },
-    })),
+    set((state) => {
+      if (!completed) {
+        return {
+          fraudAssessment: {
+            ...state.fraudAssessment,
+            assessmentCompleted: false,
+          },
+        };
+      }
+
+      const requiredDocuments = [
+        "aadhaarFront",
+        "aadhaarBack",
+        "pan",
+        "salarySlip",
+        "passbook",
+        ...(state.loan.loanType === "PROPERTY"
+          ? ["propertyDocument"]
+          : state.loan.loanType === "GOLD"
+            ? ["goldDocument"]
+            : []),
+      ];
+
+      const hasValidAssessment = requiredDocuments.every((key) => {
+        const result =
+          state.fraudAssessment.documentResults[key];
+
+        return Boolean(
+          result?.documentValid === true &&
+            Number.isFinite(result.confidence) &&
+            result.confidence >= 70 &&
+            Number.isFinite(result.fraudScore) &&
+            result.fraudScore >= 0 &&
+            result.fraudScore <= 100 &&
+            ["LOW", "MEDIUM", "HIGH"].includes(result.fraudRisk)
+        );
+      });
+
+      return {
+        fraudAssessment: {
+          ...state.fraudAssessment,
+          assessmentCompleted: hasValidAssessment,
+        },
+      };
+    }),
 
   resetFraudAssessment: () =>
     set({

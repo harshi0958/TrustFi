@@ -183,11 +183,6 @@ function isUsableOCRName(
     }
   }
 
-  console.log(
-    "Best OCR Name Similarity:",
-    bestSimilarity
-  );
-
   /*
    * Very low similarity means OCR is likely
    * garbage/unreliable.
@@ -304,16 +299,6 @@ function nameMatches(
       applicantLastName,
       documentLastName
     );
-
-  console.log(
-    "First Name Similarity:",
-    firstNameSimilarity
-  );
-
-  console.log(
-    "Last Name Similarity:",
-    lastNameSimilarity
-  );
 
   /*
    * -----------------------------------------
@@ -457,15 +442,26 @@ export default function IdentityVerification() {
 
   const validateIdentityName = (
     documentKey: string,
-    result: any
+    result: unknown
   ) => {
     const applicantName =
       normalizeName(
         personal.fullName || ""
       );
 
+    const response =
+      result && typeof result === "object"
+        ? result as Record<string, unknown>
+        : {};
+    const extractedText =
+      response.extractedText &&
+      typeof response.extractedText === "object"
+        ? response.extractedText as Record<string, unknown>
+        : {};
     const rawExtractedName =
-      result?.extractedText?.name || "";
+      typeof extractedText.name === "string"
+        ? extractedText.name
+        : "";
 
     const extractedName =
       normalizeName(
@@ -474,35 +470,6 @@ export default function IdentityVerification() {
 
     const documentLabel =
       getDocumentLabel(documentKey);
-
-    console.log(
-      "================================="
-    );
-
-    console.log(
-      "Document:",
-      documentLabel
-    );
-
-    console.log(
-      "Applicant Name:",
-      personal.fullName
-    );
-
-    console.log(
-      "OCR Name:",
-      rawExtractedName
-    );
-
-    console.log(
-      "Normalized Applicant:",
-      applicantName
-    );
-
-    console.log(
-      "Normalized Document:",
-      extractedName
-    );
 
     /*
      * -----------------------------------------
@@ -565,11 +532,6 @@ export default function IdentityVerification() {
     const matched = nameMatches(
       applicantName,
       extractedName
-    );
-
-    console.log(
-      "Identity Name Match:",
-      matched
     );
 
     /*
@@ -638,10 +600,6 @@ export default function IdentityVerification() {
       return updated;
     });
 
-    console.log(
-      `Identity verified for ${documentLabel}`
-    );
-
     return true;
   };
 
@@ -678,9 +636,9 @@ export default function IdentityVerification() {
         </h1>
 
         <p className="mt-2 text-zinc-400">
-          Upload your KYC documents securely.
-          Documents will be checked using OCR
-          and identity matching.
+          Upload the required files. OCR and name checks may provide
+          review information, but an uploaded file is not considered
+          identity- or authenticity-verified.
         </p>
       </div>
 
@@ -698,6 +656,7 @@ export default function IdentityVerification() {
           <UploadCard
             title="Aadhaar Front"
             documentType="AADHAAR"
+            documentKey="aadhaarFront"
 
             onValidation={(result) =>
               validateIdentityName(
@@ -736,6 +695,7 @@ export default function IdentityVerification() {
           <UploadCard
             title="Aadhaar Back"
             documentType="AADHAAR"
+            documentKey="aadhaarBack"
 
             onValidation={(result) =>
               validateIdentityName(
@@ -774,6 +734,7 @@ export default function IdentityVerification() {
           <UploadCard
             title="PAN Card"
             documentType="PAN"
+            documentKey="pan"
 
             onValidation={(result) =>
               validateIdentityName(
@@ -812,6 +773,7 @@ export default function IdentityVerification() {
           <UploadCard
             title="Selfie"
             documentType="SELFIE"
+            documentKey="selfie"
 
             onUploaded={() =>
               updateDocument(
@@ -837,13 +799,14 @@ export default function IdentityVerification() {
           <UploadCard
             title="Salary Slip"
             documentType="SALARY_SLIP"
+            documentKey="salarySlip"
 
-            onValidation={(result) =>
-              validateIdentityName(
-                "salarySlip",
-                result
-              )
-            }
+            // onValidation={(result) =>
+            //   validateIdentityName(
+            //     "salarySlip",
+            //     result
+            //   )
+            // }
 
             onUploaded={() =>
               updateDocument(
@@ -875,13 +838,14 @@ export default function IdentityVerification() {
           <UploadCard
             title="Bank Passbook"
             documentType="BANK_PASSBOOK"
+            documentKey="passbook"
 
-            onValidation={(result) =>
-              validateIdentityName(
-                "passbook",
-                result
-              )
-            }
+            // onValidation={(result) =>
+            //   validateIdentityName(
+            //     "passbook",
+            //     result
+            //   )
+            // }
 
             onUploaded={() =>
               updateDocument(
@@ -915,13 +879,12 @@ export default function IdentityVerification() {
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-5">
 
           <h3 className="font-semibold text-red-400">
-            Identity Verification Failed
+            Identity Review Needed
           </h3>
 
           <p className="mt-2 text-sm text-red-300">
-            One or more uploaded documents
-            could not be matched with the
-            applicant information.
+            One or more OCR name checks need manual review. The files
+            remain received; this message does not confirm authenticity.
           </p>
 
         </div>
@@ -935,8 +898,7 @@ export default function IdentityVerification() {
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
 
           <p className="text-red-400">
-            Please upload and verify all
-            required documents.
+            Please upload all required files to continue.
           </p>
 
         </div>

@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
-import { useWalletStore } from "@/store/walletStore";
 import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
   BrainCircuit,
-  ShieldCheck,
   Wallet,
   AlertTriangle,
   Clock3,
@@ -23,8 +21,39 @@ import {
 
 declare global {
   interface Window {
-    Razorpay: any;
+    Razorpay: new (options: RazorpayOptions) => RazorpayInstance;
   }
+}
+
+interface RazorpayPaymentResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpayPaymentResponse) => Promise<void>;
+  prefill: {
+    name: string;
+    email: string;
+    contact: string;
+  };
+  theme: {
+    color: string;
+  };
+  modal: {
+    ondismiss: () => void;
+  };
+}
+
+interface RazorpayInstance {
+  open: () => void;
 }
 
 export default function DashboardPage() {
@@ -32,13 +61,17 @@ export default function DashboardPage() {
 
   const {
     personal,
+    loan,
     approvedLoan,
     saveApprovedLoan,
+    fraudAssessment,
   } = useLoanStore();
 
-  const { connected } = useWalletStore();
   const [loanId, setLoanId] = useState<string | null>(null);
-const [isPaying, setIsPaying] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState("");
+  const [paymentError, setPaymentError] = useState("");
+  const paymentLock = useRef(false);
 
   useEffect(() => {
     const email =
@@ -91,125 +124,125 @@ const amount = loan.loanAmount;
   }, [personal.email, saveApprovedLoan]);
 
   const handlePayment = async () => {
-  if (!loanId) {
-    alert("Loan information not available.");
-    return;
-  }
+    if (paymentLock.current) return;
+    if (!loanId) {
+      setPaymentError("Loan information is not available. Refresh the dashboard.");
+      return;
+    }
+    if (typeof window.Razorpay !== "function") {
+      setPaymentError(
+        "Razorpay Checkout did not load. Check your connection and retry."
+      );
+      return;
+    }
 
-  try {
+    paymentLock.current = true;
+    setPaymentError("");
+    setPaymentMessage("");
     setIsPaying(true);
 
-    const data = await createPaymentOrder(loanId);
+    try {
+      const data = await createPaymentOrder(loanId);
 
-    if (!data.success) {
-      throw new Error(
-        data.message || "Unable to create payment order."
-      );
-    }
+      if (!data.success) {
+        throw new Error(data.message || "Unable to create payment order.");
+      }
 
-    const options = {
-      key: data.keyId,
+      const options: RazorpayOptions = {
+        key: data.keyId,
 
-      amount: data.order.amount,
+        amount: data.order.amount,
 
-      currency: data.order.currency,
+        currency: data.order.currency,
 
-      name: "TrustFi",
+        name: "TrustFi",
 
-      description: "TrustFi Loan Processing Fee",
+        description: "TrustFi Loan Processing Fee",
 
-      order_id: data.order.id,
+        order_id: data.order.id,
 
-    handler: async function (response: any) {
-  try {
-    console.log(
-      "Razorpay Payment Response:",
-      response
-    );
+        handler: async function (response: RazorpayPaymentResponse) {
+          try {
+            if (response.razorpay_order_id !== data.order.id) {
+              throw new Error("Checkout returned a different payment order.");
+            }
 
-    const result = await verifyPayment({
-      loanId: loanId,
+            const result = await verifyPayment({
+              loanId,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
 
-      razorpay_order_id:
-        response.razorpay_order_id,
+            if (!result.success) {
+              throw new Error(result.message || "Payment verification failed.");
+            }
 
-      razorpay_payment_id:
-        response.razorpay_payment_id,
-
-      razorpay_signature:
-        response.razorpay_signature,
-    });
-
-    if (!result.success) {
-      throw new Error(
-        result.message ||
-          "Payment verification failed."
-      );
-    }
-
-    alert(
-      "Payment verified successfully! Loan activated ✅"
-    );
-
-    window.location.reload();
-
-  } catch (error: any) {
-    console.error(
-      "Payment Verification Error:",
-      error
-    );
-
-    alert(
-      error.message ||
-        "Payment verification failed."
-    );
-
-  } finally {
-    setIsPaying(false);
-  }
-},
-
-      prefill: {
-        name: personal.fullName,
-        email: personal.email,
-        contact: personal.phone,
-      },
-
-      theme: {
-        color: "#06b6d4",
-      },
-
-      modal: {
-        ondismiss: function () {
-          setIsPaying(false);
+            setPaymentMessage(
+              "Payment verified by the server. Your loan is now active."
+            );
+            window.location.reload();
+          } catch (error: unknown) {
+            console.error("Payment verification failed.", error);
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Payment verification failed.";
+            setPaymentError(message);
+            alert(message);
+          } finally {
+            paymentLock.current = false;
+            setIsPaying(false);
+          }
         },
-      },
-    };
 
-    const razorpay =
-      new window.Razorpay(options);
+        prefill: {
+          name: personal.fullName,
+          email: personal.email,
+          contact: personal.phone,
+        },
 
-    razorpay.open();
+        theme: {
+          color: "#06b6d4",
+        },
 
-  } catch (error: any) {
-    console.error(
-      "Payment Error:",
-      error
-    );
+        modal: {
+          ondismiss: function () {
+            paymentLock.current = false;
+            setIsPaying(false);
+            setPaymentMessage(
+              "Checkout was closed. The loan remains approved and is not activated."
+            );
+          },
+        },
+      };
 
-    alert(
-      error.message ||
-        "Unable to start payment."
-    );
-
-    setIsPaying(false);
-  }
-};
+      new window.Razorpay(options).open();
+    } catch (error: unknown) {
+      console.error("Payment order could not be created.", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to start payment.";
+      setPaymentError(message);
+      alert(message);
+      paymentLock.current = false;
+      setIsPaying(false);
+    }
+  };
 const loanStatus = approvedLoan.status || "PENDING";
 
 const isApproved = loanStatus === "APPROVED";
 const isRejected = loanStatus === "REJECTED";
 const isActive = loanStatus === "ACTIVE";
+const hasRiskAssessment = approvedLoan.score > 0;
+const checkedDocumentCount = Object.values(
+  fraudAssessment.documentResults
+).filter(
+  (result) =>
+    result.documentValid === true &&
+    result.confidence >= 70
+).length;
 
   return (
     <div className="min-h-screen bg-[#050816] p-10">
@@ -302,7 +335,7 @@ const isActive = loanStatus === "ACTIVE";
         <div className="mt-8 grid grid-cols-2 gap-6 lg:grid-cols-3">
 
           <Card
-            title="Approved Amount"
+            title="Requested Amount"
             value={`₹ ${approvedLoan.amount.toLocaleString()}`}
             icon={<Wallet className="text-green-400" />}
           />
@@ -314,7 +347,7 @@ const isActive = loanStatus === "ACTIVE";
           />
 
           <Card
-            title="Credit Score"
+            title="Risk Score"
             value={approvedLoan.score}
             icon={<BrainCircuit className="text-cyan-400" />}
           />
@@ -365,22 +398,34 @@ const isActive = loanStatus === "ACTIVE";
           <ProgressStep
             number="01"
             title="Application Submitted"
-            description="Loan application received"
-            status="completed"
+            description={
+              loanId
+                ? "Application record loaded from the backend."
+                : "No submitted application is available."
+            }
+            status={loanId ? "completed" : "current"}
           />
 
           <ProgressStep
             number="02"
             title="Verification"
-            description="KYC, documents & bank verified"
-            status="completed"
+            description={`${checkedDocumentCount} OCR document-type check(s) recorded; authenticity is not confirmed.`}
+            status={
+              fraudAssessment.assessmentCompleted
+                ? "completed"
+                : "current"
+            }
           />
 
           <ProgressStep
             number="03"
             title="AI Risk Assessment"
-            description="Credit score & risk evaluated"
-            status="completed"
+            description={
+              hasRiskAssessment
+                ? "A calculated loan risk result is available."
+                : "No loan risk result is available."
+            }
+            status={hasRiskAssessment ? "completed" : "current"}
           />
 
           <ProgressStep
@@ -409,6 +454,16 @@ const isActive = loanStatus === "ACTIVE";
         {/* FUTURE PAYMENT / DISBURSEMENT */}
         {isApproved && (
           <div className="mt-6 rounded-2xl border border-green-500/20 bg-green-500/5 p-5">
+            {paymentError && (
+              <p role="alert" className="mb-4 text-sm text-red-300">
+                {paymentError}
+              </p>
+            )}
+            {paymentMessage && (
+              <p role="status" className="mb-4 text-sm text-yellow-200">
+                {paymentMessage}
+              </p>
+            )}
             <Button
   className="mt-5 bg-cyan-500 text-black hover:bg-cyan-400"
   onClick={handlePayment}
@@ -525,39 +580,38 @@ const isActive = loanStatus === "ACTIVE";
 
         <ul className="mt-5 space-y-2 text-zinc-300">
 
-          <li>✅ Aadhaar Verified</li>
-          <li>✅ PAN Verified</li>
-          <li>✅ Salary Verified</li>
-          <li>✅ Bank Verified</li>
-          <li>✅ OCR Extraction Completed</li>
-          <li>✅ AI Repayment Prediction Generated</li>
+          <li>
+            Application status: {loanStatus}
+          </li>
+          <li>
+            OCR document-type checks recorded: {checkedDocumentCount}
+          </li>
+          <li>
+            Fraud assessment:{" "}
+            {fraudAssessment.assessmentCompleted
+              ? `${fraudAssessment.fraudRisk} risk`
+              : "Incomplete"}
+          </li>
+          <li>
+            Loan risk result: {hasRiskAssessment ? "Available" : "Pending"}
+          </li>
+          <li>
+            Loan type: {loan.loanType}; document authenticity is not established
+            by OCR type checks.
+          </li>
 
         </ul>
 
       </div>
 
-      {/* FHE */}
-      <div className="mt-8 rounded-3xl border border-green-500/20 bg-green-500/10 p-6">
-
-        <div className="flex items-center gap-3">
-
-          <ShieldCheck className="text-green-400" />
-
-          <div>
-
-            <h2 className="font-bold text-green-400">
-              Fully Homomorphic Encryption
-            </h2>
-
-            <p className="mt-2 text-zinc-300">
-              All financial information remained encrypted during
-              AI computation. No sensitive data was exposed.
-            </p>
-
-          </div>
-
-        </div>
-
+      <div className="mt-8 rounded-3xl border border-yellow-500/20 bg-yellow-500/10 p-6">
+        <h2 className="font-bold text-yellow-300">
+          Privacy Processing
+        </h2>
+        <p className="mt-2 text-zinc-300">
+          Fully Homomorphic Encryption execution is not integrated or
+          verified in this application flow.
+        </p>
       </div>
 
     </div>

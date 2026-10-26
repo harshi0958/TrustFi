@@ -1,0 +1,142 @@
+warning: in the working copy of 'backend/prisma/schema.prisma', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/backend/prisma/schema.prisma b/backend/prisma/schema.prisma[m
+[1mindex 9b288e9..1602589 100644[m
+[1m--- a/backend/prisma/schema.prisma[m
+[1m+++ b/backend/prisma/schema.prisma[m
+[36m@@ -7,20 +7,13 @@[m [mdatasource db {[m
+   url      = env("DATABASE_URL")[m
+ }[m
+ [m
+[31m-enum LoanType {[m
+[31m-  PERSONAL[m
+[31m-  PROPERTY[m
+[31m-  GOLD[m
+[31m-}[m
+[31m-[m
+ model User {[m
+[31m-  id        String   @id @default(cuid())[m
+[32m+[m[32m  id        String            @id @default(cuid())[m
+   name      String[m
+[31m-  email     String   @unique[m
+[31m-  phone     String   @unique[m
+[31m-  createdAt DateTime @default(now())[m
+[31m-  updatedAt DateTime @updatedAt[m
+[31m-[m
+[32m+[m[32m  email     String            @unique[m
+[32m+[m[32m  phone     String            @unique[m
+[32m+[m[32m  createdAt DateTime          @default(now())[m
+[32m+[m[32m  updatedAt DateTime          @updatedAt[m
+   loans     LoanApplication[][m
+   otps      UserOTP[][m
+ }[m
+[36m@@ -32,64 +25,46 @@[m [mmodel UserOTP {[m
+   expiresAt DateTime[m
+   attempts  Int      @default(0)[m
+   createdAt DateTime @default(now())[m
+[31m-[m
+[31m-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)[m
+[32m+[m[32m  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)[m
+ [m
+   @@index([userId])[m
+ }[m
+ [m
+ model LoanApplication {[m
+[31m-  id             String   @id @default(cuid())[m
+[31m-[m
+[31m-  // User Account[m
+[31m-  userId         String?[m
+[31m-[m
+[31m-  fullName       String[m
+[31m-  email          String[m
+[31m-  phone          String[m
+[31m-[m
+[31m-  monthlyIncome  Float[m
+[31m-[m
+[31m-  loanType       LoanType @default(PERSONAL)[m
+[31m-[m
+[31m-  loanAmount     Float[m
+[31m-  loanMonths     Int[m
+[31m-  purpose        String[m
+[31m-[m
+[31m-  // Property Loan Details[m
+[31m-  propertyType      String?[m
+[31m-  propertyValue     Float?[m
+[31m-  propertyAddress   String?[m
+[31m-  ownershipStatus   String?[m
+[31m-[m
+[31m-  // Gold Loan Details[m
+[31m-  goldWeight        Float?[m
+[32m+[m[32m  id                String    @id @default(cuid())[m
+[32m+[m[32m  fullName          String[m
+[32m+[m[32m  email             String[m
+[32m+[m[32m  phone             String[m
+[32m+[m[32m  monthlyIncome     Float[m
+[32m+[m[32m  loanAmount        Float[m
+[32m+[m[32m  loanMonths        Int[m
+[32m+[m[32m  purpose           String[m
+[32m+[m[32m  creditScore       Int[m
+[32m+[m[32m  eligibility       Int       @default(0)[m
+[32m+[m[32m  interestRate      Float     @default(0)[m
+[32m+[m[32m  risk              String    @default("PENDING")[m
+[32m+[m[32m  status            String    @default("PENDING")[m
+[32m+[m[32m  createdAt         DateTime  @default(now())[m
+[32m+[m[32m  loanType          LoanType  @default(PERSONAL)[m
+[32m+[m[32m  goldOwnership     String?[m
+   goldPurity        String?[m
+   goldValue         Float?[m
+[31m-  goldOwnership     String?[m
+[31m-[m
+[31m-  creditScore    Int[m
+[31m-  fraudScore     Int      @default(0)[m
+[31m-  fraudRisk      String   @default("LOW")[m
+[31m-  fraudFlags     String?[m
+[31m-  riskReasons    String?[m
+[31m-  [m
+[31m-  eligibility    Int      @default(0)[m
+[31m-  interestRate   Float    @default(0)[m
+[31m-[m
+[31m-  risk           String   @default("PENDING")[m
+[31m-  status         String   @default("PENDING")[m
+[31m-[m
+[31m-  // Payment Details[m
+[31m-  paymentStatus      String   @default("NOT_REQUIRED")[m
+[31m-  paymentAmount      Float?[m
+[31m-  razorpayOrderId    String?[m
+[31m-  razorpayPaymentId  String?[m
+[31m-  paidAt             DateTime?[m
+[31m-[m
+[31m-  createdAt      DateTime @default(now())[m
+[31m-[m
+[31m-  user           User? @relation(fields: [userId], references: [id], onDelete: SetNull)[m
+[32m+[m[32m  goldWeight        Float?[m
+[32m+[m[32m  ownershipStatus   String?[m
+[32m+[m[32m  propertyAddress   String?[m
+[32m+[m[32m  propertyType      String?[m
+[32m+[m[32m  propertyValue     Float?[m
+[32m+[m[32m  paidAt            DateTime?[m
+[32m+[m[32m  paymentAmount     Float?[m
+[32m+[m[32m  paymentStatus     String    @default("NOT_REQUIRED")[m
+[32m+[m[32m  razorpayOrderId   String?[m
+[32m+[m[32m  razorpayPaymentId String?[m
+[32m+[m[32m  userId            String?[m
+[32m+[m[32m  fraudFlags        String?[m
+[32m+[m[32m  fraudRisk         String    @default("LOW")[m
+[32m+[m[32m  fraudScore        Int       @default(0)[m
+[32m+[m[32m  riskReasons       String?[m
+[32m+[m[32m  user              User?     @relation(fields: [userId], references: [id])[m
+ [m
+   @@index([userId])[m
+ }[m
+[36m@@ -99,5 +74,10 @@[m [mmodel Admin {[m
+   name      String[m
+   email     String   @unique[m
+   createdAt DateTime @default(now())[m
+[32m+[m[32m}[m
+ [m
+[31m-}[m
+\ No newline at end of file[m
+[32m+[m[32menum LoanType {[m
+[32m+[m[32m  PERSONAL[m
+[32m+[m[32m  PROPERTY[m
+[32m+[m[32m  GOLD[m
+[32m+[m[32m}[m

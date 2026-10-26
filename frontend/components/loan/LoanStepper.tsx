@@ -9,8 +9,7 @@ const steps = [
   "Banking",
   "Loan",
   "Documents",
-  "AI Review",
-  "Eligibility",
+  "AI Review & Submission",
 ];
 
 export default function LoanStepper() {

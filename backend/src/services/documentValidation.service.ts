@@ -66,7 +66,7 @@ export function detectDocumentType(text: string): {
       normalized.includes(word)
     ).length;
 
-  if (aadhaarNumber || aadhaarMatches >= 1) {
+  if (aadhaarMatches >= 1) {
     return {
       type: "AADHAAR",
       confidence: aadhaarNumber ? 95 : 80,
@@ -106,31 +106,67 @@ export function detectDocumentType(text: string): {
    * -----------------------------------------
    */
 
-  const salaryKeywords = [
+  const salaryHeaderKeywords = [
     "salary slip",
     "salary statement",
     "salary certificate",
-    "basic salary",
-    "gross salary",
-    "net salary",
-    "earnings",
-    "deductions",
+    "salary advice",
     "pay slip",
     "payslip",
+    "payroll",
+  ];
+  const salaryPayKeywords = [
+    "basic salary",
+    "basic pay",
+    "gross salary",
+    "gross pay",
+    "net salary",
+    "net pay",
+    "total earnings",
+    "earnings",
+    "deductions",
+    "allowances",
+    "house rent allowance",
+    "provident fund",
+    "professional tax",
+    "take home",
+  ];
+  const salaryEmploymentKeywords = [
     "employee id",
     "employee code",
+    "employee name",
+    "employee no",
+    "pay period",
+    "salary month",
+    "date of joining",
+    "designation",
   ];
 
-  const salaryMatches =
-    salaryKeywords.filter((word) =>
+  const salaryHeaderMatches =
+    salaryHeaderKeywords.filter((word) =>
+      normalized.includes(word)
+    ).length;
+  const salaryPayMatches =
+    salaryPayKeywords.filter((word) =>
+      normalized.includes(word)
+    ).length;
+  const salaryEmploymentMatches =
+    salaryEmploymentKeywords.filter((word) =>
       normalized.includes(word)
     ).length;
 
-  if (salaryMatches >= 2) {
+  if (
+    (salaryHeaderMatches >= 1 && salaryPayMatches >= 1) ||
+    (salaryPayMatches >= 2 && salaryEmploymentMatches >= 1) ||
+    salaryPayMatches >= 3
+  ) {
     return {
       type: "SALARY_SLIP",
       confidence: Math.min(
-        60 + salaryMatches * 8,
+        70 +
+          salaryHeaderMatches * 8 +
+          salaryPayMatches * 5 +
+          salaryEmploymentMatches * 4,
         95
       ),
     };
@@ -142,29 +178,73 @@ export function detectDocumentType(text: string): {
    * -----------------------------------------
    */
 
-  const bankKeywords = [
+  const bankAccountKeywords = [
     "account number",
+    "account no",
+    "a/c number",
+    "a/c no",
+    "acct number",
+    "acct no",
     "ifsc",
-    "branch",
+    "micr",
+    "customer id",
+    "cif",
+    "savings account",
+    "current account",
+  ];
+  const bankDocumentKeywords = [
+    "passbook",
+    "account statement",
+    "bank statement",
+  ];
+  const bankContextKeywords = [
     "bank",
-    "statement",
+    "branch",
+  ];
+  const bankActivityKeywords = [
     "opening balance",
     "closing balance",
+    "available balance",
     "transaction",
     "debit",
     "credit",
+    "withdrawal",
+    "deposit",
+    "cheque",
+    "narration",
   ];
 
-  const bankMatches =
-    bankKeywords.filter((word) =>
+  const bankAccountMatches =
+    bankAccountKeywords.filter((word) =>
+      normalized.includes(word)
+    ).length;
+  const bankDocumentMatches =
+    bankDocumentKeywords.filter((word) =>
+      normalized.includes(word)
+    ).length;
+  const bankContextMatches =
+    bankContextKeywords.filter((word) =>
+      normalized.includes(word)
+    ).length;
+  const bankActivityMatches =
+    bankActivityKeywords.filter((word) =>
       normalized.includes(word)
     ).length;
 
-  if (bankMatches >= 3) {
+  if (
+    (bankDocumentMatches > 0 && bankAccountMatches > 0) ||
+    (bankAccountMatches > 0 &&
+      bankActivityMatches > 0 &&
+      (bankContextMatches > 0 || bankActivityMatches >= 2)) ||
+    bankAccountMatches >= 2
+  ) {
     return {
       type: "BANK_PASSBOOK",
       confidence: Math.min(
-        60 + bankMatches * 7,
+        72 +
+          bankAccountMatches * 6 +
+          bankDocumentMatches * 5 +
+          bankActivityMatches * 4,
         95
       ),
     };
@@ -253,6 +333,13 @@ export function detectDocumentType(text: string): {
     };
   }
 
+  if (aadhaarNumber) {
+    return {
+      type: "AADHAAR",
+      confidence: 95,
+    };
+  }
+
   /*
    * -----------------------------------------
    * UNKNOWN
@@ -284,24 +371,22 @@ export function validateDocument(
 
   if (expectedType === "SELFIE") {
     return {
-      valid: true,
+      valid: false,
       expectedType,
       detectedType: "SELFIE",
-      confidence: 100,
+      confidence: 0,
       fraudRisk: 0,
       riskLevel: "LOW",
       reasons: [
-        "Selfie accepted for identity verification",
+        "Selfie is not OCR-verified; identity review is required",
       ],
       extractedData,
     };
   }
 
-  const detected =
-    detectDocumentType(extractedText);
+  const detected = detectDocumentType(extractedText);
 
   const reasons: string[] = [];
-
   let fraudRisk = 0;
 
   /*
@@ -310,7 +395,10 @@ export function validateDocument(
    * -----------------------------------------
    */
 
-  if (detected.type !== expectedType) {
+  if (
+    detected.type !== "UNKNOWN" &&
+    detected.type !== expectedType
+  ) {
     fraudRisk += 60;
 
     reasons.push(
@@ -325,10 +413,12 @@ export function validateDocument(
    */
 
   if (detected.type === "UNKNOWN") {
-    fraudRisk += 40;
+    fraudRisk += 100;
 
     reasons.push(
-      "Document type could not be identified"
+      extractedText.trim()
+        ? "Document type could not be identified from the OCR text. Upload a clear, full-page image of the expected document."
+        : "OCR could not read text from this image. Upload a clear, well-lit, full-page image and try again."
     );
   }
 

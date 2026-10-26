@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import prisma from "../lib/prisma";
+import { createAdminSessionToken } from "../lib/admin-session";
 
 /*
  * Temporary OTP storage.
@@ -350,16 +351,8 @@ export const verifyAdminOTP = async (
       });
     }
 
-    /*
-     * Temporary session token.
-     *
-     * We will protect the admin dashboard
-     * with this in the next step.
-     */
-
-    const token = crypto
-      .randomBytes(32)
-      .toString("hex");
+    // Issue the signed session required by administrator-only API routes.
+    const token = createAdminSessionToken(admin.id);
 
     return res.json({
       success: true,

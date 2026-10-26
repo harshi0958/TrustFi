@@ -54,11 +54,8 @@ export default function LoanDetails() {
       months,
       occupation,
 
-      // Temporary values.
-      // These will be connected to actual verification
-      // status in the document-verification step.
-      documentsVerified: true,
-      bankVerified: true,
+      documentsVerified: false,
+      bankVerified: false,
     });
   }, [
     monthlyIncome,
@@ -490,7 +487,7 @@ const handleContinue = () => {
       <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-5">
 
         <h2 className="text-lg font-semibold text-cyan-300">
-          Eligible Credit Limit
+          Indicative Loan Limit
         </h2>
 
         <p className="mt-2 text-4xl font-bold text-white">
@@ -498,22 +495,25 @@ const handleContinue = () => {
         </p>
 
         <p className="mt-2 text-sm text-zinc-400">
-          Based on your current financial profile
+          Preliminary estimate only; document and bank verification are pending.
         </p>
 
       </div>
 
-      {/* ---------------- AI CREDIT SCORE ---------------- */}
+      {/* ---------------- PRELIMINARY RISK SCORE ---------------- */}
 
       <div className="rounded-xl border border-white/10 bg-zinc-900 p-5">
 
         <p className="text-zinc-400">
-          AI Credit Score
+          Preliminary Risk Score
         </p>
 
         <h2 className="mt-2 text-3xl font-bold text-green-400">
           {result.score}
         </h2>
+        <p className="mt-2 text-xs text-zinc-400">
+          An internal estimate, not a bureau credit score or lending decision.
+        </p>
 
       </div>
 

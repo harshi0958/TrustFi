@@ -18,6 +18,7 @@
     const [phone, setPhone] = useState("");
     const [otp, setOtp] = useState("");
     const [otpSent, setOtpSent] = useState(false);
+    const [demoOtp, setDemoOtp] = useState("");
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -60,10 +61,19 @@ const handleSendOTP = async () => {
       throw new Error(data.message || "Failed to send OTP.");
     }
 
-    console.log("OTP Request Response:", data);
+    if (data.provider === "mock") {
+      if (typeof data.demoOtp !== "string" || !/^\d{6}$/.test(data.demoOtp)) {
+        throw new Error("The local demo OTP response was invalid.");
+      }
+      setDemoOtp(data.demoOtp);
+      setMessage("Development-only demo OTP mode is enabled. No SMS was sent.");
+    } else {
+      setDemoOtp("");
+      setMessage("OTP sent successfully. Please check your mobile for the OTP.");
+    }
+
     setOtpSent(true);
     setOtp("");
-    setMessage("OTP sent successfully. Please check your mobile for the OTP.");
   } catch (err: any) {
     console.error("Send OTP Error:", err);
     setError(err.message || "Unable to send OTP. Please try again.");
@@ -114,9 +124,6 @@ const handleSendOTP = async () => {
             );
         }
 
-        console.log("OTP Verification Response:", data);
-
-        
 const sessionResponse = await fetch(`${API}/api/auth/me`, {
   method: "GET",
   credentials: "include",
@@ -463,8 +470,24 @@ router.replace("/dashboard");
                         />
 
                         <p className="mt-2 text-xs text-gray-500">
-                        Enter the 6-digit OTP shown in the backend terminal.
+                        {demoOtp
+                            ? "Use the local demo code below. It is not sent by SMS."
+                            : "Enter the 6-digit OTP sent to your mobile number."}
                         </p>
+
+                        {demoOtp && (
+                        <div
+                            role="status"
+                            className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3"
+                        >
+                            <p className="text-xs font-medium text-amber-300">
+                            Development-only demo OTP mode is enabled. No SMS is sent.
+                            </p>
+                            <p className="mt-2 text-center font-mono text-lg font-bold tracking-[0.35em] text-amber-200">
+                            {demoOtp}
+                            </p>
+                        </div>
+                        )}
                     </div>
                     )}
 
@@ -540,6 +563,7 @@ router.replace("/dashboard");
                         onClick={() => {
                         setOtpSent(false);
                         setOtp("");
+                        setDemoOtp("");
                         setError("");
                         setMessage("");
                         }}

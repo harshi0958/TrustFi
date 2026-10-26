@@ -7,8 +7,10 @@ import loanRoutes from "./routes/loan.routes";
 import adminRoutes from "./routes/admin.routes";
 import paymentRoutes from "./routes/payment.routes";
 import authRoutes from "./routes/auth.routes";
+import { getOtpProvider } from "./services/otp.service";
 
 dotenv.config();
+getOtpProvider();
 
 const app = express();
 

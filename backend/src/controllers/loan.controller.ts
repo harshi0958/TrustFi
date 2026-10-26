@@ -1,5 +1,8 @@
 
 import { Request, Response } from "express";
+import { Prisma } from "@prisma/client";
+import { existsSync, statSync } from "node:fs";
+import path from "node:path";
 import prisma from "../lib/prisma";
 import { calculateRisk } from "../services/risk.service";
 
@@ -81,6 +84,7 @@ export const applyLoan = async (
       propertyValue,
       propertyAddress,
       ownershipStatus,
+      propertyDocumentUploadId,
 
       goldWeight,
       goldPurity,
@@ -118,6 +122,77 @@ export const applyLoan = async (
         success: false,
         message: "Invalid loan type.",
         allowedLoanTypes,
+      });
+    }
+
+    if (
+      loanType === "PROPERTY" &&
+      (
+        typeof propertyType !== "string" ||
+        !propertyType.trim() ||
+        !Number.isFinite(Number(propertyValue)) ||
+        Number(propertyValue) <= 0 ||
+        typeof propertyAddress !== "string" ||
+        !propertyAddress.trim() ||
+        typeof ownershipStatus !== "string" ||
+        !ownershipStatus.trim()
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Property loan details are incomplete or invalid.",
+      });
+    }
+
+    let storedPropertyDocumentUploadId: string | null = null;
+
+    if (loanType === "PROPERTY") {
+      if (
+        typeof propertyDocumentUploadId !== "string" ||
+        !/^[a-f0-9]{32}$/i.test(propertyDocumentUploadId)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "A stored property document upload is required.",
+        });
+      }
+
+      const uploadPath = path.resolve(
+        process.cwd(),
+        "uploads",
+        propertyDocumentUploadId
+      );
+
+      if (
+        !existsSync(uploadPath) ||
+        !statSync(uploadPath).isFile()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "The property document upload could not be found. Please upload it again.",
+        });
+      }
+
+      storedPropertyDocumentUploadId = propertyDocumentUploadId;
+    }
+
+    if (
+      loanType === "GOLD" &&
+      (
+        !Number.isFinite(Number(goldWeight)) ||
+        Number(goldWeight) <= 0 ||
+        typeof goldPurity !== "string" ||
+        !goldPurity.trim() ||
+        !Number.isFinite(Number(goldValue)) ||
+        Number(goldValue) <= 0 ||
+        typeof goldOwnership !== "string" ||
+        !goldOwnership.trim()
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Gold loan details are incomplete or invalid.",
       });
     }
 
@@ -215,6 +290,12 @@ export const applyLoan = async (
           loanType === "PROPERTY"
             ? ownershipStatus || null
             : null,
+        ...(loanType === "PROPERTY"
+          ? {
+              propertyDocumentUploadId:
+                storedPropertyDocumentUploadId,
+            }
+          : {}),
 
         goldWeight:
           loanType === "GOLD"
@@ -283,6 +364,17 @@ export const applyLoan = async (
     });
   } catch (error: unknown) {
     console.error("Loan Application Error:", error);
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2022"
+    ) {
+      return res.status(503).json({
+        success: false,
+        message:
+          "Loan application storage needs a database migration before this application can be saved.",
+      });
+    }
 
     return res.status(500).json({
       success: false,

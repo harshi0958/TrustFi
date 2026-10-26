@@ -8,6 +8,59 @@ import {
   getSessionCookieOptions,
   verifySessionToken,
 } from "../lib/auth-session";
+import {
+  createMockOtp,
+  getOtpProvider,
+  isLoopbackAddress,
+  OtpConfigurationError,
+  verifyMockOtp,
+} from "../services/otp.service";
+
+function getSafeErrorCode(error: unknown): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (typeof error.code === "string" ||
+      typeof error.code === "number") &&
+    /^[A-Za-z0-9_-]{1,32}$/.test(String(error.code))
+  ) {
+    return String(error.code);
+  }
+
+  return error instanceof Error &&
+    /^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(error.name)
+    ? error.name
+    : "UnknownError";
+}
+
+function isLoopbackRequest(req: Request): boolean {
+  return isLoopbackAddress(req.socket.remoteAddress);
+}
+
+function createAuthenticatedSession(
+  user: { id: string; name: string; email: string; phone: string },
+  res: Response
+) {
+  const token = createSessionToken(user.id);
+
+  res.cookie(
+    getSessionCookieName(),
+    token,
+    getSessionCookieOptions()
+  );
+
+  return res.json({
+    success: true,
+    message: "OTP verified successfully.",
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+    },
+  });
+}
 
 // =====================================================
 // REGISTER USER
@@ -130,11 +183,11 @@ export const registerUser = async (req: Request, res: Response) => {
       user,
     });
   } catch (error: any) {
-    console.error("User Registration Error:", error);
+    console.error("User registration failed.", getSafeErrorCode(error));
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Registration failed.",
+      message: "Registration failed. Please try again.",
     });
   }
 };
@@ -145,6 +198,15 @@ export const registerUser = async (req: Request, res: Response) => {
 
 export const sendOTP = async (req: Request, res: Response) => {
   try {
+    const provider = getOtpProvider();
+
+    if (provider === "mock" && !isLoopbackRequest(req)) {
+      return res.status(403).json({
+        success: false,
+        message: "Demo OTP mode is available only from this computer.",
+      });
+    }
+
     const { phone } = req.body;
 
     // -----------------------------
@@ -191,6 +253,24 @@ export const sendOTP = async (req: Request, res: Response) => {
       });
     }
 
+    if (provider === "mock") {
+      const result = createMockOtp(user.id);
+      if (result.status === "rate_limited") {
+        return res.status(429).json({
+          success: false,
+          message: "Please wait before requesting another demo code.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "A local demo code was generated. No SMS was sent.",
+        provider: "mock",
+        demoOtp: result.code,
+        expiresInSeconds: result.expiresInSeconds,
+      });
+    }
+
     // -----------------------------
     // CHECK TWILIO ENVIRONMENT
     // -----------------------------
@@ -229,27 +309,28 @@ export const sendOTP = async (req: Request, res: Response) => {
           channel: "sms",
         });
 
-    console.log("=================================");
-    console.log("TrustFi Twilio OTP Request");
-    console.log("User:", user.name);
-    console.log("Mobile:", normalizedPhone);
-    console.log("Twilio Status:", verification.status);
-    console.log("Channel:", verification.channel);
-    console.log("=================================");
-
     return res.json({
       success: true,
       message: "OTP sent successfully to your mobile number.",
       status: verification.status,
+      provider: "twilio",
     });
   } catch (error: any) {
-    console.error("Twilio Send OTP Error:", error);
+    console.error(
+      "OTP send failed.",
+      getSafeErrorCode(error)
+    );
+
+    if (error instanceof OtpConfigurationError) {
+      return res.status(503).json({
+        success: false,
+        message: "OTP provider configuration is not available.",
+      });
+    }
 
     return res.status(500).json({
       success: false,
-      message:
-        error?.message ||
-        "Failed to send OTP. Please try again.",
+      message: "Failed to send OTP. Please try again.",
     });
   }
 };
@@ -260,6 +341,8 @@ export const sendOTP = async (req: Request, res: Response) => {
 
 export const verifyOTP = async (req: Request, res: Response) => {
   try {
+    const provider = getOtpProvider();
+
     const { phone, otp } = req.body;
 
     // -----------------------------
@@ -316,6 +399,18 @@ export const verifyOTP = async (req: Request, res: Response) => {
       });
     }
 
+    if (provider === "mock") {
+      const result = verifyMockOtp(user.id, cleanOTP);
+      if (result === "approved") {
+        return createAuthenticatedSession(user, res);
+      }
+
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired OTP. Please request a new code.",
+      });
+    }
+
     // -----------------------------
     // CHECK TWILIO ENVIRONMENT
     // -----------------------------
@@ -354,37 +449,13 @@ export const verifyOTP = async (req: Request, res: Response) => {
           code: cleanOTP,
         });
 
-    console.log("=================================");
-    console.log("TrustFi OTP Verification");
-    console.log("User:", user.name);
-    console.log("Mobile:", normalizedPhone);
-    console.log("Twilio Status:", verificationCheck.status);
-    console.log("=================================");
-
     // -----------------------------
     // OTP SUCCESS
     // -----------------------------
 
-   if (verificationCheck.status === "approved") {
-  const token = createSessionToken(user.id);
-
-  res.cookie(
-    getSessionCookieName(),
-    token,
-    getSessionCookieOptions()
-  );
-
-  return res.json({
-    success: true,
-    message: "OTP verified successfully.",
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-    },
-  });
-}
+    if (verificationCheck.status === "approved") {
+      return createAuthenticatedSession(user, res);
+    }
 
     // -----------------------------
     // OTP NOT APPROVED
@@ -395,13 +466,21 @@ export const verifyOTP = async (req: Request, res: Response) => {
       message: "Invalid OTP. Please try again.",
     });
   } catch (error: any) {
-    console.error("Twilio Verify OTP Error:", error);
+    console.error(
+      "OTP verification failed.",
+      getSafeErrorCode(error)
+    );
+
+    if (error instanceof OtpConfigurationError) {
+      return res.status(503).json({
+        success: false,
+        message: "OTP provider configuration is not available.",
+      });
+    }
 
     return res.status(500).json({
       success: false,
-      message:
-        error?.message ||
-        "OTP verification failed. Please try again.",
+      message: "OTP verification failed. Please try again.",
     });
   }
 };

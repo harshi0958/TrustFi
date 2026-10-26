@@ -38,7 +38,7 @@ export default function AdminPage() {
           <tr className="border-b border-white/10">
             <th className="p-3">Applicant</th>
             <th className="p-3">Amount</th>
-            <th className="p-3">Score</th>
+            <th className="p-3">Risk Score</th>
             <th className="p-3">Status</th>
             <th className="p-3">Action</th>
           </tr>

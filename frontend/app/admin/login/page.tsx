@@ -73,10 +73,7 @@ export default function AdminLoginPage() {
     try {
       setLoading(true);
 
-      const result =
-        await requestAdminOTP(
-          cleanEmail
-        );
+      await requestAdminOTP(cleanEmail);
 
       setEmail(cleanEmail);
       setOtp("");
@@ -92,19 +89,16 @@ export default function AdminLoginPage() {
         "OTP sent successfully to your email."
       );
 
-      console.log(
-        "OTP Request Response:",
-        result
-      );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "Send OTP Error:",
         err
       );
 
       setError(
-        err.message ||
-          "Failed to send OTP."
+        err instanceof Error
+          ? err.message
+          : "Failed to send OTP."
       );
     } finally {
       setLoading(false);
@@ -144,11 +138,6 @@ export default function AdminLoginPage() {
           otp
         );
 
-      console.log(
-        "Admin Login Response:",
-        result
-      );
-
       /*
        * Store admin session information.
        */
@@ -173,15 +162,16 @@ export default function AdminLoginPage() {
        */
 
       router.push("/admin");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(
         "OTP Verification Error:",
         err
       );
 
       setError(
-        err.message ||
-          "Invalid OTP. Please try again."
+        err instanceof Error
+          ? err.message
+          : "Invalid OTP. Please try again."
       );
     } finally {
       setLoading(false);

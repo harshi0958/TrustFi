@@ -1,412 +1,173 @@
-<<<<<<< HEAD
-# 📸 Project Screenshots
+# TrustFi
 
-## 🏠 Home Page
+TrustFi is an educational loan-application project with a Next.js frontend, an
+Express/TypeScript API, PostgreSQL persistence through Prisma, OCR-assisted
+document classification, and separate loan-risk and fraud-assessment paths.
+An application submission is a request for review, not an automatic loan
+approval.
 
-<p align="center">
-<!-- <img src="images/home.png" width="90%"> -->
-</p>
+## Architecture
 
-**Landing page showcasing TrustFi's AI-powered privacy-preserving lending platform, highlighting secure loan processing using AI, OCR, Blockchain, and Fully Homomorphic Encryption (FHE).**
+- **Frontend:** Next.js 16, React 19, TypeScript, Zustand, Tailwind CSS.
+- **Backend:** Node.js, Express 5, TypeScript, Prisma 6, PostgreSQL.
+- **Document processing:** Multer receives uploads; Tesseract.js and the
+  document-validation service extract/classify supported OCR documents.
+- **Loan risk:** the backend risk service calculates an estimate from the
+  submitted financial data and document-validation indicators.
+- **Fraud assessment:** separate document/fraud signals. An incomplete
+  assessment is represented as incomplete; a completed HIGH result blocks
+  submission.
+- **User access:** registration/OTP and session-related endpoints exist.
+  Admin data endpoints require a signed administrator bearer token and a
+  matching admin record. Loan creation, risk calculation, and lookup by email
+  are not bound to a customer session, so applicant fields supplied by the
+  client must not be treated as authenticated identity.
 
----
+## Loan application flow
 
-## 📋 Loan Application
+The application has seven steps: personal details, identity documents,
+employment, banking, loan details, required uploads, and AI review/submission.
+After a valid loan-risk API response, the final review and submit action appear
+on Step 7. Required file presence is checked separately from OCR verification.
 
-<p align="center">
-<!-- <img src="images/loan.png" width="90%"> -->
-</p>
+When the required applicant fields and files are present, an application with
+incomplete OCR can be submitted for manual review. OCR failure, UNKNOWN
+classification, missing extracted fields, or a document-type mismatch does
+not prove a file is genuine and is not, by itself, an OCR verification pass.
+Applicants must still supply the fields required for their selected loan type.
+A completed HIGH fraud-risk assessment remains blocked. The backend saves a
+submitted application with `PENDING` status; only a lender/admin decision can
+approve or reject it.
 
-**Multi-step loan application process with KYC, personal information, document upload, employment verification, and encrypted financial data collection.**
+### Document and assessment limitations
 
----
+- OCR text and document-type checks are indicators for review, not proof of
+  identity, document authenticity, account ownership, property ownership, or
+  gold ownership.
+- Property Ownership / Sale Deed uploads are accepted after successful file
+  receipt without OCR classification. The upload reference is stored with a
+  property-loan application; ownership and authenticity remain unverified.
+- Selfies are not OCR-verified. A successful upload is only file receipt.
+- Loan-risk calculation and fraud assessment are separate. Loan-risk scores,
+  eligibility, rates, and EMI are estimates, not a bureau credit score or
+  lender decision.
+- The UI does not establish that FHE computation is implemented or executed.
+  The blockchain helper currently returns placeholder transaction data; it
+  does not demonstrate a real on-chain loan transaction.
 
-## 📊 User Dashboard
+## Requirements and configuration
 
-<p align="center">
-<!-- <img src="images/dashboard.png" width="90%"> -->
-</p>
+- Node.js and npm versions compatible with the package manifests.
+- A PostgreSQL database reachable by the backend.
+- Install dependencies separately in `backend` and `frontend`.
 
-**Personalized dashboard displaying AI-generated credit decisions, loan eligibility, repayment information, loan history, and encrypted financial status.**
+Create `backend/.env` and `frontend/.env.local` locally. Use your own
+development/test values; never commit secrets.
 
----
+`backend/.env`:
 
-## 👨‍💼 Admin Dashboard
-
-<p align="center">
-<!-- <img src="images/admin.png" width="90%"> -->
-</p>
-
-**Administrative dashboard for monitoring loan applications, reviewing AI-generated credit decisions, approving or rejecting loan requests, and managing the overall lending workflow securely.**
-
----
-
-# 🔄 Project Workflow
-
-```text
-User Registration
-        │
-        ▼
-Wallet Connection
-        │
-        ▼
-KYC & Personal Information
-        │
-        ▼
-OCR extracts document data
-        │
-        ▼
-Financial data encrypted using FHE
-        │
-        ▼
-AI Credit Risk Analysis
-        │
-        ▼
-Loan Eligibility Decision
-        │
-        ▼
-Admin Review & Approval
-        │
-        ▼
-Loan Disbursement
-=======
-# 🔐 TrustFi – AI Powered Privacy-Preserving DeFi Lending Platform
-
-<p align="center">
-  <img src="https://img.shields.io/badge/AI-Powered-blue?style=for-the-badge"/>
-  <img src="https://img.shields.io/badge/FHE-Encrypted-green?style=for-the-badge"/>
-  <img src="https://img.shields.io/badge/Blockchain-Secured-orange?style=for-the-badge"/>
-  <img src="https://img.shields.io/badge/Next.js-Frontend-black?style=for-the-badge"/>
-</p>
-
-## 🚀 About TrustFi
-
-**TrustFi** is an AI-powered, privacy-preserving decentralized lending platform that enables users to apply for undercollateralized loans without exposing sensitive financial information.
- 
-The platform combines **Artificial Intelligence**, **OCR-based document verification**, **Fully Homomorphic Encryption (FHE)**, and **Blockchain Smart Contracts** to create a secure, transparent, and privacy-first lending ecosystem.
-
----
-
-## 🌐 Live Demo
-
-🔗 **Deployment:**  
-https://trust-fi.vercel.app/
-
-🎨 **Project Demo/UI Prototype:**  
-https://www.figma.com/make/ANTkuzqloEgTgi8J4AEapx/TrustFi-Fintech-Web-App?code-node-id=0-9&p=f&t=LAp8g6eSpb0StRLT-0&fullscreen=1
-
----
-
-# ✨ Features
-
-- 🔐 Secure Wallet Connection
-- 🤖 AI-based Credit Scoring
-- 📄 OCR Document Verification
-- 🔒 Fully Homomorphic Encryption (FHE)
-- ⛓️ Blockchain Smart Contracts
-- 💰 Undercollateralized Loan Approval
-- 📊 Loan Dashboard
-- 📑 Loan History Tracking
-- 👨‍💼 Admin Loan Approval Panel
-- ⚡ Real-time Loan Status Updates
-
----
-
-# 🏗️ System Architecture
-
-```
-User
-   │
-   ▼
-Connect Wallet
-   │
-   ▼
-Upload Documents
-   │
-   ▼
-OCR Verification
-   │
-   ▼
-AI Credit Engine
-   │
-   ▼
-FHE Encryption
-   │
-   ▼
-Blockchain Smart Contract
-   │
-   ▼
-Loan Approval
->>>>>>> f992e6ebcfaaa9b2147ebf44feb924163ee83095
+```dotenv
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require"
+PORT=5000
+FRONTEND_URL="http://localhost:3000"
+JWT_SECRET="replace-with-a-random-secret-at-least-32-bytes-long"
 ```
 
----
+The backend also references optional integrations:
 
-<<<<<<< HEAD
-# 💡 Innovation
+- Email/OTP: `EMAIL_USER`, `EMAIL_APP_PASSWORD`.
+- Twilio Verify: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+  `TWILIO_VERIFY_SERVICE_SID`.
+- Payments: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`.
+- Admin email: `ADMIN_EMAIL`, `ADMIN_EMAIL_PASSWORD`.
 
-✅ AI-powered Credit Scoring
+Admin OTP verification issues a signed, 24-hour bearer token using
+`JWT_SECRET`. Admin dashboard/user APIs and loan-list/decision APIs require
+that token; the frontend stores it for the active browser session. Configure a
+strong secret of at least 32 bytes and keep it private.
 
-✅ OCR-based Automatic Document Verification
+Configure only services you intend to use. Keep credentials out of source
+control and logs.
 
-✅ Fully Homomorphic Encryption (FHE) for Privacy-Preserving AI
+`frontend/.env.local`:
 
-✅ Blockchain-backed Transparent Lending Process
-
-✅ Undercollateralized Loan Assessment
-
-✅ Secure Wallet Authentication
-
----
-
-# 🎯 Why TrustFi?
-
-Unlike traditional lending platforms, TrustFi **never exposes users' sensitive financial information** during AI evaluation.
-
-Our platform combines:
-
-- 🤖 Artificial Intelligence
-- 🔒 Fully Homomorphic Encryption (FHE)
-- 📄 OCR-based Verification
-- ⛓️ Blockchain Transparency
-
-to enable **secure, intelligent, and privacy-first undercollateralized lending.**
-
----
-
-# 🌐 Live Links
-
-### 🚀 Live Deployment
-**Visit TrustFi:**  
-👉 https://trust-fi.vercel.app/
-
-> **Note:** The deployment is currently under active development. Core features are available, and additional modules are being integrated.
-
-### 🎨 UI/UX Prototype (Figma)
-**Explore the complete UI design:**  
-👉 https://www.figma.com/make/ANTkuzqloEgTgi8J4AEapx/TrustFi-Fintech-Web-App?code-node-id=0-9&p=f&t=LAp8g6eSpb0StRLT-0&fullscreen=1
-
----
-
-# 📬 Demo
-
-| Resource | Link |
-|----------|------|
-| 🌐 Live Website | https://trust-fi.vercel.app/ |
-| 🎨 Figma Prototype | https://www.figma.com/make/ANTkuzqloEgTgi8J4AEapx/TrustFi-Fintech-Web-App?code-node-id=0-9&p=f&t=LAp8g6eSpb0StRLT-0&fullscreen=1 |
-| 💻 GitHub Repository | https://github.com/harshi0958/TrustFi |
-
----
-
-# 👨‍💻 Team
-
-| Name | Role |
-|------|------|
-| **Harshit Jariwala** | Full Stack Developer & Blockchain Integration |
-| **Vidhi Jaglaganeshwala** | Frontend Developer & UI/UX |
-
----
-
-<div align="center">
-
-## ⭐ Star this repository if you like our project!
-
-**TrustFi — Borrow Money Without Exposing Your Financial Data.**
-
-Made with ❤️ for Hackathon 2026
-
-</div>
-=======
-# 🛠 Tech Stack
-
-## Frontend
-
-- Next.js
-- React
-- TypeScript
-- Tailwind CSS
-- Zustand
-- Framer Motion
-- Lucide React
-
-## Backend
-
-- Node.js
-- Express.js
-- TypeScript
-- Prisma ORM
-- PostgreSQL
-- Tesseract OCR
-
-## Blockchain
-
-- Solidity
-- Hardhat
-- Ethers.js
-- MetaMask
-
-## AI & Security
-
-- OCR (Tesseract.js)
-- AI Credit Engine
-- Fully Homomorphic Encryption (FHE)
-
----
-
-# 📂 Project Structure
-
-```
-TrustFi
-│
-├── frontend
-│   ├── app
-│   ├── components
-│   ├── lib
-│   ├── store
-│   └── styles
-│
-├── backend
-│   ├── controllers
-│   ├── routes
-│   ├── services
-│   ├── prisma
-│   └── server.ts
-│
-├── contracts
-│   ├── LoanFactory.sol
-│   ├── LoanPool.sol
-│   └── Smart Contracts
-│
-└── README.md
+```dotenv
+NEXT_PUBLIC_API_URL="http://localhost:5000"
 ```
 
----
+`NEXT_PUBLIC_API_URL` is public configuration and must not contain a secret.
+The backend allows localhost port 3000 by default. For another frontend
+origin, configure `FRONTEND_URL`.
 
-# ⚙️ Installation
+## Database setup and migrations
 
-## Clone Repository
+Before migrating, verify that `DATABASE_URL` points to the intended development
+or test database. Do not run migration commands against production without an
+approved backup and deployment process.
 
-```bash
-git clone https://github.com/harshi0958/TrustFi.git
-
-cd TrustFi
-```
-
----
-
-## Frontend
-
-```bash
-cd frontend
-
+```powershell
+cd D:\TrustFi\backend
 npm install
+npx prisma validate
+npx prisma migrate status
+```
 
+Back up the intended database using its provider's supported backup/branch
+mechanism. Apply committed migrations only after verifying the target:
+
+```powershell
+npx prisma migrate deploy
+npx prisma migrate status
+```
+
+The `20261026090000_add_property_document_upload_id` migration adds one
+nullable `TEXT` column, `LoanApplication.propertyDocumentUploadId`. It does
+not alter or delete existing row values. Confirm the column and migration
+status before testing property-loan submission.
+
+**Observed database limitation:** during the latest read-only check of the
+backend's configured Neon database, Prisma reported the migration as applied,
+but `information_schema.columns` did not contain
+`LoanApplication.propertyDocumentUploadId`. Do not submit a property-loan
+application to this database until its branch/target and actual schema are
+reconciled. No schema write was performed during that check.
+
+## Run locally
+
+In separate PowerShell terminals:
+
+```powershell
+cd D:\TrustFi\backend
+npm install
 npm run dev
 ```
 
----
-
-## Backend
-
-```bash
-cd backend
-
+```powershell
+cd D:\TrustFi\frontend
 npm install
-
 npm run dev
 ```
 
----
+Open `http://localhost:3000`. The backend health endpoint is
+`http://localhost:5000/`.
 
-## Smart Contracts
+## Checks and known limitations
 
-```bash
-cd contracts
+Available package scripts:
 
-npm install
+- Backend: `npm run build`; no backend test or lint script is declared.
+- Frontend: `npm run build` and `npm run lint`.
+- Focused backend OCR tests can be run from `backend` with:
 
-npx hardhat compile
+  ```powershell
+  $env:TS_NODE_TRANSPILE_ONLY = "true"
+  node --test -r ts-node/register src/services/documentValidation.service.test.ts
+  ```
 
-npx hardhat node
-```
+Use a dedicated test database for API submission tests. Do not create test
+applications in production. Local frontend/backend configuration must be
+checked independently: the frontend API URL does not determine which
+PostgreSQL database the backend uses.
 
----
-
-# 🔄 Workflow
-
-1. Connect Wallet
-2. Complete KYC
-3. Upload Aadhaar / PAN / Salary Slip
-4. OCR extracts user information
-5. AI calculates credit score
-6. FHE encrypts financial information
-7. Smart Contract stores loan request
-8. Admin approves loan
-9. Dashboard displays loan status
-
----
-
-# 🔒 Security Features
-
-- Fully Homomorphic Encryption
-- Privacy-Preserving AI
-- OCR Verification
-- Blockchain Smart Contracts
-- Secure Wallet Authentication
-- End-to-End Confidential Processing
-
----
-
-# 📸 Project Screens
-
-- Landing Page
-- Wallet Connection
-- Loan Application
-- OCR Verification
-- AI Credit Decision
-- Dashboard
-- Admin Approval Panel
-
----
-
-# 🎯 Future Scope
-
-- Real Blockchain Deployment
-- Multi-chain Support
-- Zero Knowledge Proofs (ZKP)
-- Decentralized Identity (DID)
-- Cross-chain Lending
-- AI Fraud Detection
-- On-chain Credit Reputation
-- Automated Smart Contract Repayments
-
----
-
-# 👥 Team
-
-### Vidhi Jaglaganeshwala
-
-Frontend • Backend • Blockchain
-
-### Harshit Jariwala
-
-Frontend • Backend • AI • UI/UX 
-
----
-
-# 🏆 Built For
-
-Hackathon Project
-
-**AI + Blockchain + FHE + DeFi**
-
----
-
-# 📄 License
-
-This project is developed for educational and hackathon purposes.
-
----
-
-⭐ If you like this project, don't forget to give it a Star!
->>>>>>> f992e6ebcfaaa9b2147ebf44feb924163ee83095
+TrustFi is a project/demo implementation, not a production lending, identity
+verification, fraud-detection, privacy, or FHE service.

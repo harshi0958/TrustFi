@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AdminSidebar from "@/components/admin/AdminSidebar";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminFetch } from "@/lib/adminApi";
 
 export default function AdminApprovalsPage() {
   const router = useRouter();
@@ -15,6 +14,7 @@ export default function AdminApprovalsPage() {
 
   const [loans, setLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const [search, setSearch] = useState("");
   const [selectedLoan, setSelectedLoan] = useState<any>(null);
@@ -43,11 +43,13 @@ export default function AdminApprovalsPage() {
   const loadLoans = async () => {
     try {
       setLoading(true);
+      setLoadError("");
 
-      const res = await fetch(`${API}/api/loan`);
+      const res = await adminFetch("/api/loan");
 
       if (!res.ok) {
-        throw new Error("Failed to load loans");
+        const result = await res.json().catch(() => ({}));
+        throw new Error(result.message || "Failed to load pending applications.");
       }
 
       const data = await res.json();
@@ -55,6 +57,11 @@ export default function AdminApprovalsPage() {
       setLoans(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Approvals error:", error);
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load pending applications."
+      );
     } finally {
       setLoading(false);
     }
@@ -116,15 +123,18 @@ export default function AdminApprovalsPage() {
     try {
       setActionLoading(true);
 
-      const res = await fetch(
-        `${API}/api/loan/approve/${selectedLoan.id}`,
+      const res = await adminFetch(
+        `/api/loan/approve/${encodeURIComponent(selectedLoan.id)}`,
         {
           method: "PATCH",
         }
       );
+      const result = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error("Failed to approve loan");
+        throw new Error(
+          result.message || "Failed to approve loan."
+        );
       }
 
       setSelectedLoan(null);
@@ -132,6 +142,11 @@ export default function AdminApprovalsPage() {
       await loadLoans();
     } catch (error) {
       console.error("Approve error:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to approve loan."
+      );
     } finally {
       setActionLoading(false);
     }
@@ -147,8 +162,8 @@ export default function AdminApprovalsPage() {
     try {
       setActionLoading(true);
 
-      const res = await fetch(
-        `${API}/api/loan/reject/${selectedLoan.id}`,
+      const res = await adminFetch(
+        `/api/loan/reject/${encodeURIComponent(selectedLoan.id)}`,
         {
           method: "PATCH",
         }
@@ -293,6 +308,15 @@ export default function AdminApprovalsPage() {
 
         <main className="px-8 py-10">
 
+          {loadError && (
+            <div className="mb-6 flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">
+              <p>{loadError}</p>
+              <button type="button" onClick={loadLoans} className="font-semibold underline">
+                Retry
+              </button>
+            </div>
+          )}
+
           {/* TITLE */}
 
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-8">
@@ -419,7 +443,7 @@ export default function AdminApprovalsPage() {
                     </th>
 
                     <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
-                      Credit Score
+                      Risk Score
                     </th>
 
                     <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
@@ -550,7 +574,7 @@ export default function AdminApprovalsPage() {
 
                   {/* EMPTY */}
 
-                  {pendingLoans.length === 0 && (
+                  {pendingLoans.length === 0 && !loadError && (
 
                     <tr>
 
@@ -652,7 +676,7 @@ export default function AdminApprovalsPage() {
                   />
 
                   <ReviewItem
-                    label="Credit Score"
+                    label="Risk Score"
                     value={selectedLoan.creditScore}
                   />
 

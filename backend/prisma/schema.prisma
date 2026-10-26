@@ -7,20 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum LoanType {
-  PERSONAL
-  PROPERTY
-  GOLD
-}
-
 model User {
-  id        String   @id @default(cuid())
+  id        String            @id @default(cuid())
   name      String
-  email     String   @unique
-  phone     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  email     String            @unique
+  phone     String            @unique
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
   loans     LoanApplication[]
   otps      UserOTP[]
 }
@@ -32,64 +25,47 @@ model UserOTP {
   expiresAt DateTime
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
-
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model LoanApplication {
-  id             String   @id @default(cuid())
-
-  // User Account
-  userId         String?
-
-  fullName       String
-  email          String
-  phone          String
-
-  monthlyIncome  Float
-
-  loanType       LoanType @default(PERSONAL)
-
-  loanAmount     Float
-  loanMonths     Int
-  purpose        String
-
-  // Property Loan Details
-  propertyType      String?
-  propertyValue     Float?
-  propertyAddress   String?
-  ownershipStatus   String?
-
-  // Gold Loan Details
-  goldWeight        Float?
+  id                String    @id @default(cuid())
+  fullName          String
+  email             String
+  phone             String
+  monthlyIncome     Float
+  loanAmount        Float
+  loanMonths        Int
+  purpose           String
+  creditScore       Int
+  eligibility       Int       @default(0)
+  interestRate      Float     @default(0)
+  risk              String    @default("PENDING")
+  status            String    @default("PENDING")
+  createdAt         DateTime  @default(now())
+  loanType          LoanType  @default(PERSONAL)
+  goldOwnership     String?
   goldPurity        String?
   goldValue         Float?
-  goldOwnership     String?
-
-  creditScore    Int
-  fraudScore     Int      @default(0)
-  fraudRisk      String   @default("LOW")
-  fraudFlags     String?
-  riskReasons    String?
-  
-  eligibility    Int      @default(0)
-  interestRate   Float    @default(0)
-
-  risk           String   @default("PENDING")
-  status         String   @default("PENDING")
-
-  // Payment Details
-  paymentStatus      String   @default("NOT_REQUIRED")
-  paymentAmount      Float?
-  razorpayOrderId    String?
-  razorpayPaymentId  String?
-  paidAt             DateTime?
-
-  createdAt      DateTime @default(now())
-
-  user           User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  goldWeight        Float?
+  ownershipStatus   String?
+  propertyAddress   String?
+  propertyType      String?
+  propertyValue     Float?
+  propertyDocumentUploadId String?
+  paidAt            DateTime?
+  paymentAmount     Float?
+  paymentStatus     String    @default("NOT_REQUIRED")
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  userId            String?
+  fraudFlags        String?
+  fraudRisk         String    @default("LOW")
+  fraudScore        Int       @default(0)
+  riskReasons       String?
+  user              User?     @relation(fields: [userId], references: [id])
 
   @@index([userId])
 }
@@ -99,5 +75,10 @@ model Admin {
   name      String
   email     String   @unique
   createdAt DateTime @default(now())
+}
 
+enum LoanType {
+  PERSONAL
+  PROPERTY
+  GOLD
 }

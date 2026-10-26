@@ -7,6 +7,7 @@ import {
   getAdminDashboard,
   getAdminUsers,
 } from "../controllers/admin.controller";
+import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();
 
@@ -15,6 +16,8 @@ router.post("/register", registerAdmin);
 router.post("/request-otp", requestAdminOTP);
 
 router.post("/verify-otp", verifyAdminOTP);
+
+router.use(requireAdmin);
 
 router.get("/dashboard", getAdminDashboard);
 

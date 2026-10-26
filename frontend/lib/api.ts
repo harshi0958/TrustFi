@@ -1,6 +1,54 @@
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
+export interface LoanApplicationSummary {
+  id: string;
+  loanAmount: number;
+  loanMonths: number;
+  interestRate: number;
+  creditScore: number;
+  eligibility: number;
+  risk: string;
+  status: string;
+  paymentStatus?: string;
+}
+
+export type OCRDocumentType =
+  | "AADHAAR"
+  | "PAN"
+  | "SALARY_SLIP"
+  | "BANK_PASSBOOK"
+  | "PROPERTY_DOCUMENT"
+  | "GOLD_DOCUMENT"
+  | "SELFIE";
+
+interface PaymentOrderResponse {
+  success: boolean;
+  message?: string;
+  keyId: string;
+  order: {
+    id: string;
+    amount: number;
+    currency: string;
+  };
+}
+
+interface PaymentVerificationResponse {
+  success: boolean;
+  message?: string;
+}
+
+interface AdminLoginResponse {
+  success: boolean;
+  message: string;
+  token: string;
+  admin: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
 function getApiUrl(path: string): string {
   if (!API) {
     throw new Error(
@@ -11,10 +59,10 @@ function getApiUrl(path: string): string {
   return `${API.replace(/\/+$/, "")}${path}`;
 }
 
-async function readResponse<T = any>(res: Response): Promise<T> {
+async function readResponse<T = unknown>(res: Response): Promise<T> {
   const text = await res.text();
 
-  let result: any;
+  let result: unknown;
 
   try {
     result = text ? JSON.parse(text) : {};
@@ -24,10 +72,17 @@ async function readResponse<T = any>(res: Response): Promise<T> {
     };
   }
 
-  if (!res.ok || result.success === false) {
+  const resultRecord =
+    result && typeof result === "object"
+      ? result as Record<string, unknown>
+      : {};
+
+  if (!res.ok || resultRecord.success === false) {
     throw new Error(
-      result.message ||
-        result.error ||
+      (typeof resultRecord.message === "string" &&
+        resultRecord.message) ||
+        (typeof resultRecord.error === "string" &&
+          resultRecord.error) ||
         `API request failed with status ${res.status}.`
     );
   }
@@ -37,7 +92,7 @@ async function readResponse<T = any>(res: Response): Promise<T> {
 
 /* ---------------- APPLY LOAN ---------------- */
 
-export async function applyLoan(data: any) {
+export async function applyLoan(data: Record<string, unknown>) {
   const res = await fetch(getApiUrl("/api/loan/apply"), {
     method: "POST",
     headers: {
@@ -46,14 +101,42 @@ export async function applyLoan(data: any) {
     body: JSON.stringify(data),
   });
 
-  return readResponse(res);
+  const result = await readResponse<{
+    success?: unknown;
+    message?: unknown;
+    loan?: {
+      id?: unknown;
+    };
+  }>(res);
+
+  if (
+    result.success !== true ||
+    typeof result.loan?.id !== "string" ||
+    result.loan.id.length === 0
+  ) {
+    throw new Error(
+      typeof result.message === "string"
+        ? result.message
+        : "The server did not confirm that the loan application was saved."
+    );
+  }
+
+  return result as {
+    success: true;
+    message?: string;
+    loan: { id: string };
+  };
 }
 
 /* ---------------- DOCUMENT OCR ---------------- */
 
-export async function uploadDocument(file: File) {
+export async function uploadDocument(
+  file: File,
+  expectedType: OCRDocumentType
+) {
   const form = new FormData();
   form.append("document", file);
+  form.append("expectedType", expectedType);
 
   const res = await fetch(getApiUrl("/api/ocr/upload"), {
     method: "POST",
@@ -94,12 +177,14 @@ export async function rejectLoan(id: string) {
 
 /* ---------------- GET LOAN BY EMAIL ---------------- */
 
-export async function getLoanByEmail(email: string) {
+export async function getLoanByEmail(
+  email: string
+): Promise<LoanApplicationSummary> {
   const res = await fetch(
     getApiUrl(`/api/loan/${encodeURIComponent(email)}`)
   );
 
-  return readResponse(res);
+  return readResponse<LoanApplicationSummary>(res);
 }
 
 /* ---------------- CALCULATE LOAN RISK ---------------- */
@@ -115,19 +200,26 @@ export async function calculateLoanRisk(data: {
   fraudScore?: number;
   fraudRisk?: number | "LOW" | "MEDIUM" | "HIGH";
   fraudFlags?: string[];
-}) {
+}, signal?: AbortSignal): Promise<unknown> {
   const res = await fetch(getApiUrl("/api/loan/risk"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
+    signal,
   });
 
   const result = await readResponse<{
     success: boolean;
-    risk: any;
+    risk?: unknown;
   }>(res);
+
+  if (result.success !== true || !result.risk) {
+    throw new Error(
+      "The loan risk API returned an incomplete response."
+    );
+  }
 
   return result.risk;
 }
@@ -183,7 +275,7 @@ export async function verifyAdminOTP(
     }
   );
 
-  return readResponse(res);
+  return readResponse<AdminLoginResponse>(res);
 }
 
 /* ---------------- CREATE RAZORPAY ORDER ---------------- */
@@ -193,6 +285,7 @@ export async function createPaymentOrder(loanId: string) {
     getApiUrl("/api/payment/create-order"),
     {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
       },
@@ -200,7 +293,22 @@ export async function createPaymentOrder(loanId: string) {
     }
   );
 
-  return readResponse(res);
+  const result = await readResponse<PaymentOrderResponse>(res);
+  if (
+    result.success !== true ||
+    typeof result.keyId !== "string" ||
+    !result.keyId ||
+    typeof result.order?.id !== "string" ||
+    !result.order.id ||
+    result.order.amount !== 99900 ||
+    result.order.currency !== "INR"
+  ) {
+    throw new Error(
+      "The server returned an invalid payment order. No payment was started."
+    );
+  }
+
+  return result;
 }
 
 /* ---------------- VERIFY RAZORPAY PAYMENT ---------------- */
@@ -215,6 +323,7 @@ export async function verifyPayment(data: {
     getApiUrl("/api/payment/verify"),
     {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
       },
@@ -222,5 +331,5 @@ export async function verifyPayment(data: {
     }
   );
 
-  return readResponse(res);
+  return readResponse<PaymentVerificationResponse>(res);
 }

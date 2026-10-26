@@ -11,6 +11,8 @@ export default function DocumentUpload() {
     loan,
     documents,
     updateDocument,
+    setPropertyDocumentUploadId,
+    setFraudAssessmentCompleted,
   } = useLoanStore();
 
   const isPropertyLoan = loan.loanType === "PROPERTY";
@@ -21,9 +23,13 @@ export default function DocumentUpload() {
       | "salarySlip"
       | "passbook"
       | "propertyDocument"
-      | "goldDocument"
+      | "goldDocument",
+    uploadId?: string
   ) => {
     updateDocument(documentKey, true);
+    if (documentKey === "propertyDocument") {
+      setPropertyDocumentUploadId(uploadId ?? null);
+    }
   };
 
   const handleRemoved = (
@@ -34,6 +40,9 @@ export default function DocumentUpload() {
       | "goldDocument"
   ) => {
     updateDocument(documentKey, false);
+    if (documentKey === "propertyDocument") {
+      setPropertyDocumentUploadId(null);
+    }
   };
 
   const financialDocumentsUploaded =
@@ -50,6 +59,16 @@ export default function DocumentUpload() {
     financialDocumentsUploaded &&
     loanSpecificDocumentUploaded;
 
+  const documentStatus = (uploaded: boolean) =>
+    uploaded
+      ? "File received; authenticity unverified"
+      : "Required";
+
+  const continueToAIReview = () => {
+    setFraudAssessmentCompleted(true);
+    nextStep();
+  };
+
   return (
     <div className="space-y-8">
 
@@ -62,7 +81,8 @@ export default function DocumentUpload() {
 
         <p className="mt-2 text-zinc-400">
           Upload your financial and loan-specific documents
-          for AI verification.
+          for upload and review. Upload completion does not establish
+          document authenticity.
         </p>
       </div>
 
@@ -113,6 +133,7 @@ export default function DocumentUpload() {
           <UploadCard
             title="Salary Slip"
             documentType="SALARY_SLIP"
+            documentKey="salarySlip"
             onUploaded={() =>
               handleUploaded("salarySlip")
             }
@@ -126,6 +147,7 @@ export default function DocumentUpload() {
           <UploadCard
             title="Bank Passbook / Statement"
             documentType="BANK_PASSBOOK"
+            documentKey="passbook"
             onUploaded={() =>
               handleUploaded("passbook")
             }
@@ -150,8 +172,9 @@ export default function DocumentUpload() {
           <UploadCard
             title="Property Ownership / Sale Deed"
             documentType="PROPERTY_DOCUMENT"
-            onUploaded={() =>
-              handleUploaded("propertyDocument")
+            documentKey="propertyDocument"
+            onUploaded={(uploadId) =>
+              handleUploaded("propertyDocument", uploadId)
             }
             onRemoved={() =>
               handleRemoved("propertyDocument")
@@ -173,6 +196,7 @@ export default function DocumentUpload() {
           <UploadCard
             title="Gold Ownership / Purchase / Valuation Document"
             documentType="GOLD_DOCUMENT"
+            documentKey="goldDocument"
             onUploaded={() =>
               handleUploaded("goldDocument")
             }
@@ -222,10 +246,7 @@ export default function DocumentUpload() {
             </li>
           )}
 
-          <li>
-            ✅ Verified financial data can be protected
-            using Fully Homomorphic Encryption.
-          </li>
+          <li>Fully Homomorphic Encryption is not verified in this flow.</li>
 
         </ul>
 
@@ -249,13 +270,11 @@ export default function DocumentUpload() {
             <span
               className={
                 documents.salarySlip
-                  ? "text-green-400"
+                  ? "text-amber-300"
                   : "text-red-400"
               }
             >
-              {documents.salarySlip
-                ? "Verified"
-                : "Required"}
+              {documentStatus(documents.salarySlip)}
             </span>
           </div>
 
@@ -267,13 +286,11 @@ export default function DocumentUpload() {
             <span
               className={
                 documents.passbook
-                  ? "text-green-400"
+                  ? "text-amber-300"
                   : "text-red-400"
               }
             >
-              {documents.passbook
-                ? "Verified"
-                : "Required"}
+              {documentStatus(documents.passbook)}
             </span>
           </div>
 
@@ -287,13 +304,13 @@ export default function DocumentUpload() {
               <span
                 className={
                   documents.propertyDocument
-                    ? "text-green-400"
+                    ? "text-amber-300"
                     : "text-red-400"
                 }
               >
-                {documents.propertyDocument
-                  ? "Verified"
-                  : "Required"}
+                {documentStatus(
+                  documents.propertyDocument
+                )}
               </span>
 
             </div>
@@ -309,13 +326,11 @@ export default function DocumentUpload() {
               <span
                 className={
                   documents.goldDocument
-                    ? "text-green-400"
+                    ? "text-amber-300"
                     : "text-red-400"
                 }
               >
-                {documents.goldDocument
-                  ? "Verified"
-                  : "Required"}
+                {documentStatus(documents.goldDocument)}
               </span>
 
             </div>
@@ -339,7 +354,7 @@ export default function DocumentUpload() {
         <Button
           className="bg-cyan-500 text-black hover:bg-cyan-400"
           disabled={!allRequiredDocumentsUploaded}
-          onClick={nextStep}
+          onClick={continueToAIReview}
         >
           Continue to AI Review
         </Button>

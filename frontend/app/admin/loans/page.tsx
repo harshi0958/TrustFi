@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AdminSidebar from "@/components/admin/AdminSidebar";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminFetch } from "@/lib/adminApi";
 
 export default function AdminLoansPage() {
   const router = useRouter();
@@ -15,6 +14,7 @@ export default function AdminLoansPage() {
 
   const [loans, setLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const [search, setSearch] = useState("");
   const [loanType, setLoanType] = useState("ALL");
@@ -44,11 +44,13 @@ export default function AdminLoansPage() {
   const loadLoans = async () => {
     try {
       setLoading(true);
+      setLoadError("");
 
-      const res = await fetch(`${API}/api/loan`);
+      const res = await adminFetch("/api/loan");
 
       if (!res.ok) {
-        throw new Error("Failed to load loans");
+        const result = await res.json().catch(() => ({}));
+        throw new Error(result.message || "Failed to load loan applications.");
       }
 
       const data = await res.json();
@@ -56,6 +58,11 @@ export default function AdminLoansPage() {
       setLoans(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Loans error:", error);
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load loan applications."
+      );
     } finally {
       setLoading(false);
     }
@@ -73,7 +80,7 @@ export default function AdminLoansPage() {
 
   const approveLoan = async (id: string) => {
     try {
-      const res = await fetch(`${API}/api/loan/approve/${id}`, {
+      const res = await adminFetch(`/api/loan/approve/${encodeURIComponent(id)}`, {
         method: "PATCH",
       });
 
@@ -93,7 +100,7 @@ export default function AdminLoansPage() {
 
   const rejectLoan = async (id: string) => {
     try {
-      const res = await fetch(`${API}/api/loan/reject/${id}`, {
+      const res = await adminFetch(`/api/loan/reject/${encodeURIComponent(id)}`, {
         method: "PATCH",
       });
 
@@ -286,6 +293,15 @@ export default function AdminLoansPage() {
         {/* ================= MAIN ================= */}
 
         <main className="px-8 py-10">
+
+          {loadError && (
+            <div className="mb-6 flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">
+              <p>{loadError}</p>
+              <button type="button" onClick={loadLoans} className="font-semibold underline">
+                Retry
+              </button>
+            </div>
+          )}
 
           {/* TITLE */}
 
@@ -530,7 +546,7 @@ export default function AdminLoansPage() {
                     </th>
 
                     <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
-                      Score
+                      Risk Score
                     </th>
 
                    <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
@@ -730,7 +746,7 @@ export default function AdminLoansPage() {
 
                   {/* EMPTY */}
 
-                  {filteredLoans.length === 0 && (
+                  {filteredLoans.length === 0 && !loadError && (
 
                     <tr>
 

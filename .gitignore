@@ -43,3 +43,17 @@ Thumbs.db
 
 # Archives / test files
 images.zip
+
+# Dependencies and generated files
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+dist/
+**/dist/
+coverage/
+
+# Local environment secrets
+.env
+.env.*
+!.env.example

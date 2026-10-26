@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -16,12 +16,19 @@ import {
 } from "lucide-react";
 
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { useLoanStore } from "@/store/loanStore";
 import { calculateLoanRisk } from "@/lib/api";
+import {
+  isHighFraudRiskBlocked,
+  isValidLoanRiskResult,
+  shouldShowRiskRetry,
+  type LoanRiskResult,
+} from "@/lib/underwriting";
 
 const steps = [
   "Preparing applicant financial data...",
-  "Checking required documents...",
+  "Checking uploaded documents...",
   "Validating applicant information...",
   "Preparing financial data for analysis...",
   "Running loan risk assessment...",
@@ -30,44 +37,14 @@ const steps = [
   "Generating assessment summary...",
 ];
 
-interface RiskResult {
-  score: number;
-  risk: string;
-  eligibility: number;
-  interestRate: number;
-  approved: boolean;
-  eligibleAmount: number;
-  emi: number;
-}
-
 const validRiskLevels = ["LOW", "MEDIUM", "HIGH"];
 
-function isValidRiskResult(value: unknown): value is RiskResult {
-  if (!value || typeof value !== "object") return false;
-
-  const result = value as Record<string, unknown>;
-
-  return (
-    Number.isFinite(Number(result.score)) &&
-    Number.isFinite(Number(result.eligibility)) &&
-    Number.isFinite(Number(result.interestRate)) &&
-    Number.isFinite(Number(result.eligibleAmount)) &&
-    Number.isFinite(Number(result.emi)) &&
-    typeof result.approved === "boolean" &&
-    typeof result.risk === "string" &&
-    Number(result.score) >= 0 &&
-    Number(result.score) <= 1000 &&
-    Number(result.eligibility) >= 0 &&
-    Number(result.eligibility) <= 100 &&
-    Number(result.interestRate) >= 0 &&
-    Number(result.eligibleAmount) >= 0 &&
-    Number(result.emi) >= 0
-  );
-}
-
-export default function AIProcessing() {
+export default function AIProcessing({
+  children,
+}: {
+  children?: ReactNode;
+}) {
   const {
-    nextStep,
     personal,
     loan,
     documents,
@@ -76,15 +53,20 @@ export default function AIProcessing() {
   } = useLoanStore();
 
   const [progress, setProgress] = useState(0);
-  const [current, setCurrent] = useState(0);
-  const [riskResult, setRiskResult] = useState<RiskResult | null>(null);
+  const [riskAssessment, setRiskAssessment] = useState<{
+    inputKey: string;
+    result: LoanRiskResult;
+  } | null>(null);
   const [riskError, setRiskError] = useState("");
   const [isAssessing, setIsAssessing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  // Prevent duplicate requests without cancelling a request
-  // whenever the component state changes.
-  const assessmentStartedRef = useRef(false);
+  const requestRef = useRef<{
+    inputKey: string;
+    requestId: number;
+    controller: AbortController;
+  } | null>(null);
+  const requestIdRef = useRef(0);
   const mountedRef = useRef(false);
 
   useEffect(() => {
@@ -92,43 +74,44 @@ export default function AIProcessing() {
 
     return () => {
       mountedRef.current = false;
+      requestRef.current?.controller.abort();
+      requestRef.current = null;
     };
   }, []);
 
-  // --------------------------------------------------
   // DOCUMENT FILE PRESENCE
-  // File presence alone does not mean OCR verification.
-  // --------------------------------------------------
+  // Upload presence is not the same as successful OCR verification.
 
   const aadhaarPresent = Boolean(
     documents.aadhaarFront && documents.aadhaarBack
   );
-
   const panPresent = Boolean(documents.pan);
   const salaryPresent = Boolean(documents.salarySlip);
   const bankPresent = Boolean(documents.passbook);
   const selfiePresent = Boolean(documents.selfie);
+  const extraLoanDocumentPresent =
+    loan.loanType === "PROPERTY"
+      ? documents.propertyDocument
+      : loan.loanType === "GOLD"
+        ? documents.goldDocument
+        : true;
 
   const allDocumentsPresent = Boolean(
     aadhaarPresent &&
       panPresent &&
       salaryPresent &&
       bankPresent &&
-      selfiePresent
+      selfiePresent &&
+      extraLoanDocumentPresent
   );
 
-  // --------------------------------------------------
-  // FRAUD ASSESSMENT DATA
-  // This must be populated by the actual document
-  // validation/fraud assessment workflow.
-  // --------------------------------------------------
+  // FRAUD ASSESSMENT
+  // Never invent a fraud score or mark an incomplete assessment complete.
 
   const fraudScore = Number(fraudAssessment.fraudScore);
   const fraudRisk = fraudAssessment.fraudRisk;
 
-  const fraudFlags = Array.isArray(fraudAssessment.fraudFlags)
-    ? fraudAssessment.fraudFlags
-    : [];
+  const fraudFlags = fraudAssessment.fraudFlags;
 
   const documentResults = fraudAssessment.documentResults ?? {};
 
@@ -155,12 +138,10 @@ export default function AIProcessing() {
     "aadhaar",
     "front",
   ]);
-
   const aadhaarBackValidated = isValidatedDocument([
     "aadhaar",
     "back",
   ]);
-
   const panValidated = isValidatedDocument(["pan"]);
   const salaryValidated = isValidatedDocument(["salary"]);
 
@@ -185,8 +166,6 @@ export default function AIProcessing() {
       extraLoanDocumentValidated
   );
 
-  // A completed fraud assessment and validated required documents
-  // are both required before this gate can pass.
   const fraudAssessmentCompleted = Boolean(
     fraudAssessment.assessmentCompleted === true &&
       allDocumentsValidated &&
@@ -196,15 +175,51 @@ export default function AIProcessing() {
       validRiskLevels.includes(fraudRisk)
   );
 
-  // HIGH fraud risk must not be bypassed because a separate
-  // document-validation gate is incomplete.
-  const fraudBlocked =
-    fraudAssessment.assessmentCompleted === true &&
-    fraudRisk === "HIGH";
+  const fraudBlocked = isHighFraudRiskBlocked(
+    fraudAssessment.assessmentCompleted === true,
+    fraudRisk
+  );
 
-  // --------------------------------------------------
-  // PROCESSING ANIMATION
-  // --------------------------------------------------
+  const riskRequest = useMemo(
+    () => ({
+      monthlyIncome: Number(personal.monthlyIncome || 0),
+      loanAmount: Number(loan.amount || 0),
+      loanMonths: Number(loan.months || 0),
+      occupation: personal.occupation || "",
+      documentsVerified: allDocumentsValidated,
+      bankVerified: bankValidated,
+      ...(fraudAssessmentCompleted
+        ? {
+            fraudScore,
+            fraudRisk,
+            fraudFlags,
+          }
+        : {}),
+    }),
+    [
+      personal.monthlyIncome,
+      loan.amount,
+      loan.months,
+      personal.occupation,
+      allDocumentsValidated,
+      bankValidated,
+      fraudAssessmentCompleted,
+      fraudScore,
+      fraudRisk,
+      fraudFlags,
+    ]
+  );
+  const riskRequestKey = JSON.stringify(riskRequest);
+  const riskResult =
+    riskAssessment?.inputKey === riskRequestKey
+      ? riskAssessment.result
+      : null;
+  const current = Math.min(
+    steps.length - 1,
+    Math.floor(progress / 13)
+  );
+
+  // PROGRESS ANIMATION
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -221,66 +236,55 @@ export default function AIProcessing() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    setCurrent(
-      Math.min(steps.length - 1, Math.floor(progress / 13))
-    );
-  }, [progress]);
-
-  // --------------------------------------------------
-  // RUN LOAN RISK ASSESSMENT
-  // This is separate from the fraud assessment.
-  // --------------------------------------------------
+  // LOAN RISK ASSESSMENT
+  // OCR incompleteness remains visible and is sent as unverified input.
 
   useEffect(() => {
-    if (
-      progress < 90 ||
-      !allDocumentsValidated ||
-      !fraudAssessmentCompleted ||
-      fraudBlocked ||
-      riskResult ||
-      assessmentStartedRef.current
-    ) {
+    if (progress < 90 || riskResult) {
       return;
     }
 
-    assessmentStartedRef.current = true;
+    if (requestRef.current?.inputKey === riskRequestKey) {
+      return;
+    }
+
+    requestRef.current?.controller.abort();
+    const controller = new AbortController();
+    const requestId = ++requestIdRef.current;
+    requestRef.current = {
+      inputKey: riskRequestKey,
+      requestId,
+      controller,
+    };
 
     const runAssessment = async () => {
       setIsAssessing(true);
       setRiskError("");
 
       try {
-        const result = await calculateLoanRisk({
-          monthlyIncome: Number(personal.monthlyIncome || 0),
-          loanAmount: Number(loan.amount || 0),
-          loanMonths: Number(loan.months || 0),
+        const response = await calculateLoanRisk(
+          riskRequest,
+          controller.signal
+        );
 
-          // Placeholder until a genuine credit-score source
-          // is integrated.
-          creditScore: 0,
+        if (
+          !mountedRef.current ||
+          requestRef.current?.requestId !== requestId
+        ) {
+          return;
+        }
 
-          occupation: personal.occupation || "",
-
-          // Only validated documents should satisfy these flags.
-          documentsVerified: allDocumentsValidated,
-          bankVerified: bankValidated,
-
-          // Forward the existing fraud assessment to the backend.
-          fraudScore,
-          fraudRisk,
-          fraudFlags,
-        });
-
-        if (!mountedRef.current) return;
-
-        if (!isValidRiskResult(result)) {
+        if (!isValidLoanRiskResult(response)) {
           throw new Error(
             "The loan risk API returned invalid or incomplete data."
           );
         }
 
-        setRiskResult(result);
+        const result = response;
+        setRiskAssessment({
+          inputKey: riskRequestKey,
+          result,
+        });
 
         saveApprovedLoan({
           amount: result.eligibleAmount,
@@ -289,12 +293,23 @@ export default function AIProcessing() {
           eligibility: result.eligibility,
           interestRate: result.interestRate,
           risk: result.risk,
-          status: result.approved ? "PENDING" : "REJECTED",
+          status:
+            result.approved ||
+            !fraudAssessmentCompleted ||
+            fraudBlocked
+              ? "PENDING"
+              : "REJECTED",
         });
 
         setProgress(100);
       } catch (error: unknown) {
-        if (!mountedRef.current) return;
+        if (
+          !mountedRef.current ||
+          requestRef.current?.requestId !== requestId ||
+          controller.signal.aborted
+        ) {
+          return;
+        }
 
         setRiskError(
           error instanceof Error
@@ -302,10 +317,13 @@ export default function AIProcessing() {
             : "Loan risk assessment failed. Please try again."
         );
 
-        // Allow the user to retry the request.
-        assessmentStartedRef.current = false;
+        setIsAssessing(false);
+        requestRef.current = null;
       } finally {
-        if (mountedRef.current) {
+        if (
+          mountedRef.current &&
+          requestRef.current?.requestId === requestId
+        ) {
           setIsAssessing(false);
         }
       }
@@ -314,77 +332,47 @@ export default function AIProcessing() {
     void runAssessment();
   }, [
     progress,
-    allDocumentsValidated,
+    riskResult,
+    riskRequest,
+    riskRequestKey,
+    saveApprovedLoan,
     fraudAssessmentCompleted,
     fraudBlocked,
-    riskResult,
-    personal.monthlyIncome,
-    personal.occupation,
-    loan.amount,
-    loan.months,
-    bankValidated,
-    fraudScore,
-    fraudRisk,
-    fraudFlags,
-    saveApprovedLoan,
     retryCount,
   ]);
 
-  // --------------------------------------------------
   // RETRY
-  // --------------------------------------------------
 
   const retryAssessment = () => {
     if (isAssessing) return;
 
-    assessmentStartedRef.current = false;
+    requestRef.current?.controller.abort();
+    requestRef.current = null;
     setRiskError("");
-    setRiskResult(null);
+    setRiskAssessment(null);
     setProgress(90);
     setRetryCount((previous) => previous + 1);
   };
 
-  // --------------------------------------------------
-  // CONTINUE GATE
-  // --------------------------------------------------
+  const riskAssessmentReady = isValidLoanRiskResult(riskResult);
 
-  const canContinue = Boolean(
-    progress === 100 &&
-      riskResult &&
-      allDocumentsValidated &&
-      fraudAssessmentCompleted &&
-      !fraudBlocked
-  );
+  const displayedProgress = riskResult ? 100 : progress;
 
-  useEffect(() => {
-    if (!canContinue) return;
-
-    const timer = setTimeout(() => {
-      nextStep();
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [canContinue, nextStep]);
-
-  // --------------------------------------------------
-  // DISPLAY STATUS
-  // --------------------------------------------------
-
-  const processingIndicator =
-    progress < 40
-      ? 35
-      : progress < 70
-        ? 65
-        : progress < 100
-          ? 85
-          : 100;
+const processingIndicator =
+  displayedProgress < 40
+    ? 35
+    : displayedProgress < 70
+      ? 65
+      : displayedProgress < 100
+        ? 85
+        : 100;
 
   const riskStatus = !allDocumentsPresent
-    ? "Documents Required"
+    ? "Some Documents Missing"
     : !allDocumentsValidated
-      ? "Document Verification Required"
+      ? "OCR Validation Incomplete"
       : !fraudAssessmentCompleted
-        ? "Fraud Assessment Required"
+        ? "Fraud Assessment Pending"
         : fraudBlocked
           ? "Manual Review Required"
           : riskResult
@@ -479,11 +467,10 @@ export default function AIProcessing() {
         />
       </div>
 
-      {!allDocumentsValidated && allDocumentsPresent && (
+      {!allDocumentsValidated && (
         <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-300">
-          Document files are present, but all required OCR validation
-          results have not passed yet. Complete the document validation
-          workflow before proceeding.
+          Some OCR validations are incomplete. Loan-risk processing can
+          continue, but file presence does not confirm document authenticity.
         </div>
       )}
 
@@ -503,27 +490,19 @@ export default function AIProcessing() {
         <Progress value={progress} className="h-3" />
 
         <p className="mt-4 text-lg text-cyan-300">
-          {!allDocumentsPresent
-            ? "Complete the required document uploads..."
-            : !allDocumentsValidated
-              ? "Waiting for required document verification..."
-              : !fraudAssessmentCompleted
-                ? "Waiting for completed fraud assessment..."
-                : fraudBlocked
-                  ? "High fraud risk requires manual review..."
-                  : riskError
-                    ? "Assessment needs attention..."
-                    : isAssessing
-                      ? "Calculating loan risk and eligibility..."
-                      : riskResult
-                        ? "Loan risk calculation completed."
-                        : steps[current]}
+          {riskError
+            ? "Assessment needs attention..."
+            : isAssessing
+              ? "Calculating loan risk and eligibility..."
+              : riskResult
+                ? "Loan risk calculation completed."
+                : steps[current]}
         </p>
 
         {!allDocumentsPresent && (
           <p className="mt-2 text-sm text-yellow-400">
-            All required document files must be present before the
-            loan risk calculation can proceed.
+            Some document files are missing. Processing will use the
+            information available to the risk API.
           </p>
         )}
       </div>
@@ -532,9 +511,9 @@ export default function AIProcessing() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <RiskCard
-          title="Credit Score"
+          title="Risk Score"
           value={riskResult ? String(riskResult.score) : "Pending"}
-          description="Score returned by the loan risk API"
+          description="Calculated risk score; no bureau credit score is connected."
         />
 
         <RiskCard
@@ -578,6 +557,8 @@ export default function AIProcessing() {
         />
       </div>
 
+      {riskAssessmentReady && children}
+
       {/* FRAUD STATUS */}
 
       <div
@@ -609,8 +590,8 @@ export default function AIProcessing() {
             </h3>
 
             <p className="mt-1 text-sm text-zinc-400">
-              Fraud status must come from the actual document-fraud
-              assessment, not from the credit-risk result.
+              Fraud status comes from the document-fraud assessment,
+              separately from loan-risk results.
             </p>
           </div>
         </div>
@@ -660,26 +641,23 @@ export default function AIProcessing() {
           </div>
         )}
 
-        {!fraudAssessmentCompleted && !fraudBlocked && (
+        {!fraudAssessmentCompleted && (
           <p className="mt-4 text-sm text-yellow-300">
-            Fraud assessment is not confirmed as complete. The
-            application will not automatically advance until a
-            successful fraud result and required document validations
-            are saved.
+            Fraud assessment remains unconfirmed. Continuing the
+            application does not mean fraud verification has passed.
           </p>
         )}
 
         {fraudBlocked && (
           <p className="mt-4 text-sm font-medium text-red-300">
-            High fraud risk detected. Automatic progression is blocked
-            pending further review.
+            High fraud risk is recorded. The application requires
+            appropriate review before a lending decision.
           </p>
         )}
 
         {fraudAssessmentCompleted && fraudRisk === "MEDIUM" && (
           <p className="mt-4 text-sm text-yellow-300">
-            Medium fraud risk detected. Follow the required review
-            policy before making a lending decision.
+            Medium fraud risk detected. Follow the applicable review policy.
           </p>
         )}
       </div>
@@ -698,7 +676,7 @@ export default function AIProcessing() {
           icon={<ShieldCheck />}
           title="Verification Status"
           value={riskStatus}
-          description="Reflects document and assessment requirements."
+          description="Shows current document and assessment status."
           valueClass={riskStatusColor}
         />
 
@@ -721,7 +699,7 @@ export default function AIProcessing() {
 
       {/* API ERROR */}
 
-      {riskError && (
+      {shouldShowRiskRetry(riskError, isAssessing) && (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
           <div className="flex items-center gap-3">
             <AlertTriangle className="text-red-400" />
@@ -733,20 +711,15 @@ export default function AIProcessing() {
 
           <p className="mt-2 text-sm text-red-300">{riskError}</p>
 
-          <button
+          <Button
             type="button"
             onClick={retryAssessment}
-            disabled={
-              isAssessing ||
-              !allDocumentsValidated ||
-              !fraudAssessmentCompleted ||
-              fraudBlocked
-            }
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-red-500/20 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isAssessing}
+            className="mt-4 inline-flex items-center gap-2 bg-red-500/20 text-red-200 hover:bg-red-500/30"
           >
             <RefreshCw size={16} />
             Retry Assessment
-          </button>
+          </Button>
         </div>
       )}
 
@@ -756,21 +729,21 @@ export default function AIProcessing() {
         <AnalysisItem
           icon={<FileCheck />}
           title="Required Document Files"
-          description="Checking whether required document files are present."
+          description="Checks whether the required files are present."
           completed={allDocumentsPresent}
         />
 
         <AnalysisItem
           icon={<UserCheck />}
           title="Document OCR Validation"
-          description="Requires passing validation results for each required document."
+          description="Reports actual OCR validation results; not a navigation blocker."
           completed={allDocumentsValidated}
         />
 
         <AnalysisItem
           icon={<CreditCard />}
           title="Financial Analysis"
-          description="Evaluating income, requested amount and repayment capability."
+          description="Evaluates income, requested amount and repayment capability."
           completed={Boolean(riskResult)}
         />
 
@@ -798,36 +771,30 @@ export default function AIProcessing() {
 
         <p className="mt-2 text-zinc-300">
           {riskError
-            ? "The loan risk calculation failed and needs attention."
-            : !allDocumentsPresent
-              ? "Complete all required document uploads."
-              : !allDocumentsValidated
-                ? "Required document OCR validation is incomplete."
-                : !fraudAssessmentCompleted && !fraudBlocked
-                  ? "Fraud assessment must be completed separately."
-                  : fraudBlocked
-                    ? "High fraud risk requires review before proceeding."
-                    : riskResult
-                      ? "Loan risk calculation completed. All required gates passed."
-                      : "Evaluating the financial information."}
+            ? "The loan-risk calculation failed and needs attention."
+            : !riskResult
+              ? "Waiting for a successful loan-risk API result."
+              : !allDocumentsValidated || !fraudAssessmentCompleted
+                ? "Loan-risk calculation completed, but document or fraud verification remains incomplete."
+                : fraudBlocked
+                  ? "Loan-risk calculation completed. High fraud risk remains flagged for review."
+                  : "Loan-risk calculation completed."}
         </p>
 
-        {riskResult &&
-          fraudAssessmentCompleted &&
-          !fraudBlocked && (
-            <div className="mt-4 flex items-center gap-2 text-green-400">
-              <CheckCircle2 size={20} />
-              <span>Required assessment gates are satisfied.</span>
-            </div>
-          )}
+        {riskResult && (
+          <div className="mt-4 flex items-center gap-2 text-green-400">
+            <CheckCircle2 size={20} />
+            <span>Loan-risk API returned a valid result.</span>
+          </div>
+        )}
+
       </div>
+
     </div>
   );
 }
 
-/* -----------------------------------------
- * SUMMARY ITEM
- * ----------------------------------------- */
+/* SUMMARY ITEM */
 
 function SummaryItem({
   label,
@@ -846,9 +813,7 @@ function SummaryItem({
   );
 }
 
-/* -----------------------------------------
- * RISK CARD
- * ----------------------------------------- */
+/* RISK CARD */
 
 function RiskCard({
   title,
@@ -862,19 +827,15 @@ function RiskCard({
   return (
     <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-5">
       <p className="text-sm text-zinc-400">{title}</p>
-
       <h2 className="mt-2 break-words text-2xl font-bold text-cyan-400">
         {value}
       </h2>
-
       <p className="mt-1 text-xs text-zinc-500">{description}</p>
     </div>
   );
 }
 
-/* -----------------------------------------
- * VERIFICATION CARD
- * ----------------------------------------- */
+/* VERIFICATION CARD */
 
 function VerificationCard({
   label,
@@ -894,8 +855,8 @@ function VerificationCard({
   const statusText = !verified
     ? "Pending"
     : validated
-      ? "OCR Verified"
-      : "File Present";
+      ? "OCR Type Checked"
+      : "File Present; Validation Pending";
 
   const statusColor = !verified
     ? "text-zinc-400"
@@ -922,9 +883,7 @@ function VerificationCard({
   );
 }
 
-/* -----------------------------------------
- * STATUS CARD
- * ----------------------------------------- */
+/* STATUS CARD */
 
 function StatusCard({
   icon,
@@ -955,9 +914,7 @@ function StatusCard({
   );
 }
 
-/* -----------------------------------------
- * ANALYSIS ITEM
- * ----------------------------------------- */
+/* ANALYSIS ITEM */
 
 function AnalysisItem({
   icon,

@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AdminSidebar from "@/components/admin/AdminSidebar";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminFetch } from "@/lib/adminApi";
 
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -16,6 +15,7 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
   // =========================
@@ -41,11 +41,13 @@ export default function AdminUsersPage() {
   const loadUsers = async () => {
     try {
       setLoading(true);
+      setLoadError("");
 
-      const res = await fetch(`${API}/api/admin/users`);
+      const res = await adminFetch("/api/admin/users");
 
       if (!res.ok) {
-        throw new Error("Failed to load users");
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to load users.");
       }
 
       const data = await res.json();
@@ -53,6 +55,9 @@ export default function AdminUsersPage() {
       setUsers(data.users || []);
     } catch (error) {
       console.error("Users error:", error);
+      setLoadError(
+        error instanceof Error ? error.message : "Failed to load users."
+      );
     } finally {
       setLoading(false);
     }
@@ -201,6 +206,15 @@ export default function AdminUsersPage() {
         {/* ================= MAIN ================= */}
 
         <main className="px-8 py-10">
+
+          {loadError && (
+            <div className="mb-6 flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">
+              <p>{loadError}</p>
+              <button type="button" onClick={loadUsers} className="font-semibold underline">
+                Retry
+              </button>
+            </div>
+          )}
 
           {/* TITLE */}
 
@@ -460,7 +474,7 @@ export default function AdminUsersPage() {
 
                   {/* EMPTY */}
 
-                  {filteredUsers.length === 0 && (
+                  {filteredUsers.length === 0 && !loadError && (
 
                     <tr>
 
@@ -666,7 +680,7 @@ export default function AdminUsersPage() {
                           </th>
 
                           <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
-                            Credit Score
+                            Risk Score
                           </th>
 
                           <th className="px-5 py-4 text-center text-xs uppercase tracking-wider text-gray-500">
@@ -801,4 +815,3 @@ export default function AdminUsersPage() {
     </div>
   );
 }
-

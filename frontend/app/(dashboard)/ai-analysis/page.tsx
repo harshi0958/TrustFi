@@ -2,7 +2,6 @@
 
 import {
   BrainCircuit,
-  ShieldCheck,
   ScanSearch,
   AlertTriangle,
   CheckCircle2,
@@ -10,11 +9,27 @@ import {
 import { useLoanStore } from "@/store/loanStore";
 
 export default function AIAnalysisPage() {
-  const { approvedLoan } = useLoanStore();
+  const { approvedLoan, fraudAssessment } = useLoanStore();
 
-  const score = approvedLoan.score || 820;
-  const eligibility = approvedLoan.eligibility || 80;
-  const risk = approvedLoan.risk || "Low";
+  const hasRiskAssessment = approvedLoan.score > 0;
+  const risk = hasRiskAssessment
+    ? approvedLoan.risk
+    : "Pending";
+  const passedDocumentChecks = Object.values(
+    fraudAssessment.documentResults
+  ).filter(
+    (result) =>
+      result.documentValid === true &&
+      result.confidence >= 70
+  ).length;
+  const applicationStatus =
+    approvedLoan.status === "APPROVED"
+      ? "Approved by lender"
+      : approvedLoan.status === "REJECTED"
+        ? "Eligibility criteria not met"
+        : approvedLoan.status === "PENDING"
+          ? "Pending review"
+          : "Not submitted";
 
   return (
     <div className="space-y-8">
@@ -27,15 +42,17 @@ export default function AIAnalysisPage() {
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
 
         <Card
-          title="AI Credit Score"
-          value={`${score}`}
+          title="Loan Risk Score"
+          value={hasRiskAssessment ? `${approvedLoan.score}` : "Pending"}
           color="text-cyan-400"
           icon={<BrainCircuit />}
         />
 
         <Card
           title="Eligibility"
-          value={`${eligibility}%`}
+          value={
+            hasRiskAssessment ? `${approvedLoan.eligibility}%` : "Pending"
+          }
           color="text-green-400"
           icon={<CheckCircle2 />}
         />
@@ -44,18 +61,24 @@ export default function AIAnalysisPage() {
           title="Risk Level"
           value={risk}
           color={
-            risk === "Low"
+            risk === "LOW"
               ? "text-green-400"
-              : risk === "Medium"
+              : risk === "MEDIUM"
               ? "text-yellow-400"
-              : "text-red-400"
+              : risk === "HIGH"
+                ? "text-red-400"
+                : "text-zinc-400"
           }
           icon={<AlertTriangle />}
         />
 
         <Card
           title="OCR Status"
-          value="Verified"
+          value={
+            passedDocumentChecks > 0
+              ? `${passedDocumentChecks} type check(s) passed`
+              : "Pending"
+          }
           color="text-cyan-400"
           icon={<ScanSearch />}
         />
@@ -77,48 +100,45 @@ export default function AIAnalysisPage() {
 
         <div className="mt-6 space-y-4 text-zinc-300">
 
-          <p>✅ Aadhaar matched successfully.</p>
-
-          <p>✅ OCR extracted income correctly.</p>
-
-          <p>✅ Salary verification completed.</p>
-
-          <p>✅ Credit score is above lending threshold.</p>
-
-          <p>✅ No suspicious financial activity detected.</p>
-
           <p>
-            🤖 Recommendation:
-            <span className="ml-2 font-semibold text-green-400">
-              Loan Approved
-            </span>
+            Loan risk assessment:{" "}
+            {hasRiskAssessment ? "Result received from the risk service." : "Pending."}
           </p>
+          <p>
+            Document OCR: {passedDocumentChecks} document-type check(s) passed.
+            This does not confirm authenticity or identity.
+          </p>
+          <p>
+            Fraud assessment:{" "}
+            {fraudAssessment.assessmentCompleted
+              ? `${fraudAssessment.fraudRisk} risk`
+              : "Incomplete"}
+          </p>
+          <p>Application status: {applicationStatus}.</p>
 
         </div>
 
       </div>
 
-      {/* Encryption */}
-      <div className="rounded-3xl border border-green-500/20 bg-green-500/10 p-8">
+      <div className="rounded-3xl border border-yellow-500/20 bg-yellow-500/10 p-8">
 
         <div className="flex items-center gap-3">
 
-          <ShieldCheck
-            className="text-green-400"
+          <AlertTriangle
+            className="text-yellow-400"
             size={30}
           />
 
-          <h2 className="text-2xl font-bold text-green-400">
-            Fully Homomorphic Encryption
+          <h2 className="text-2xl font-bold text-yellow-300">
+            Privacy Processing
           </h2>
 
         </div>
 
         <p className="mt-6 text-zinc-300 leading-8">
 
-          All personal financial data remained encrypted during
-          AI computation. Sensitive information was never exposed
-          to the lender or the AI model.
+          Fully Homomorphic Encryption execution is not integrated or
+          verified in this application flow.
 
         </p>
 

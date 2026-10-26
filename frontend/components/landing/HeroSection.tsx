@@ -106,7 +106,7 @@ export default function HeroSection() {
 
                 <div className="rounded-xl bg-black/40 p-5">
                   <p className="text-sm text-zinc-400">
-                    AI Credit Score
+                    AI Risk Assessment
                   </p>
 
                   <h3 className="mt-2 text-3xl font-bold text-green-400">

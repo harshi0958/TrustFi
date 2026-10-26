@@ -60,6 +60,26 @@ export const ocrController = async (
       });
     }
 
+    if (expectedType === "PROPERTY_DOCUMENT") {
+      return res.json({
+        success: true,
+        message:
+          "Property document file received. Ownership and authenticity have not been verified.",
+        expectedDocumentType: expectedType,
+        uploadId: req.file.filename,
+        ocrSkipped: true,
+        extractedText: {
+          rawText: "",
+          detectedType: "NOT_CHECKED",
+          expectedType,
+          confidence: 0,
+          documentValid: false,
+          validationMessage:
+            "OCR type and property ownership checks were not performed.",
+        },
+      });
+    }
+
     /*
      * -----------------------------------------
      * SELFIE
@@ -88,12 +108,12 @@ export const ocrController = async (
           detectedType: "SELFIE",
           expectedType: "SELFIE",
 
-          confidence: 100,
+          confidence: 0,
 
-          documentValid: true,
+          documentValid: false,
 
           validationMessage:
-            "Selfie accepted for identity verification.",
+            "Selfie uploaded. Identity verification has not been performed.",
 
           /*
            * ---------------------------------
@@ -116,10 +136,32 @@ export const ocrController = async (
      * -----------------------------------------
      */
 
-    const result = await extractText(
-      req.file.path,
-      expectedType as any
-    );
+    let result;
+
+    try {
+      result = await extractText(
+        req.file.path,
+        expectedType as any
+      );
+    } catch (error: unknown) {
+      console.error("OCR processing failed for uploaded document:", error);
+
+      return res.json({
+        success: true,
+        message:
+          "File uploaded, but OCR processing could not be completed. Manual review is required.",
+        expectedDocumentType: expectedType,
+        extractedText: {
+          rawText: "",
+          detectedType: "UNKNOWN",
+          expectedType,
+          confidence: 0,
+          documentValid: false,
+          validationMessage:
+            "OCR processing failed. The file was received, but document type and authenticity remain unverified.",
+        },
+      });
+    }
 
     /*
      * -----------------------------------------
@@ -158,8 +200,8 @@ export const ocrController = async (
 
       message:
         result.documentValid
-          ? "Document uploaded and verified successfully"
-          : "Document uploaded but validation issues were detected",
+          ? "Document passed OCR document-type checks"
+          : "Document was uploaded but OCR validation issues were detected",
 
       expectedDocumentType:
         expectedType,

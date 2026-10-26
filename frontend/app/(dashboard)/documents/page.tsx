@@ -2,34 +2,38 @@
 
 import {
   FileCheck,
-  BadgeCheck,
-  Download,
-  Eye,
 } from "lucide-react";
+import { useLoanStore } from "@/store/loanStore";
 
 export default function DocumentsPage() {
-  const documents = [
-    {
-      name: "Aadhaar Card",
-      status: "Verified",
-      type: "Identity Document",
-    },
-    {
-      name: "PAN Card",
-      status: "Verified",
-      type: "Tax Document",
-    },
-    {
-      name: "Salary Slip",
-      status: "Verified",
-      type: "Income Proof",
-    },
-    {
-      name: "Bank Statement",
-      status: "Verified",
-      type: "Financial Record",
-    },
+  const { documents, loan, fraudAssessment } = useLoanStore();
+  const documentRows = [
+    { name: "Aadhaar Front", key: "aadhaarFront" },
+    { name: "Aadhaar Back", key: "aadhaarBack" },
+    { name: "PAN Card", key: "pan" },
+    { name: "Selfie", key: "selfie" },
+    { name: "Salary Slip", key: "salarySlip" },
+    { name: "Bank Passbook", key: "passbook" },
+    ...(loan.loanType === "PROPERTY"
+      ? [{ name: "Property Document", key: "propertyDocument" }]
+      : loan.loanType === "GOLD"
+        ? [{ name: "Gold Document", key: "goldDocument" }]
+        : []),
   ];
+
+  const getStatus = (key: string) => {
+    const result = fraudAssessment.documentResults[key];
+
+    if (result) {
+      return result.documentValid && result.confidence >= 70
+        ? "OCR type check passed"
+        : "OCR validation incomplete";
+    }
+
+    return documents[key as keyof typeof documents]
+      ? "File uploaded; validation not recorded"
+      : "Not uploaded";
+  };
 
   return (
     <div className="space-y-8">
@@ -40,7 +44,7 @@ export default function DocumentsPage() {
 
       <div className="grid gap-6">
 
-        {documents.map((doc) => (
+        {documentRows.map((doc) => (
 
           <div
             key={doc.name}
@@ -67,7 +71,7 @@ export default function DocumentsPage() {
                   </h2>
 
                   <p className="text-zinc-400">
-                    {doc.type}
+                    {getStatus(doc.key)}
                   </p>
 
                 </div>
@@ -76,25 +80,10 @@ export default function DocumentsPage() {
 
               <div className="flex items-center gap-3">
 
-                <span className="flex items-center gap-2 rounded-full bg-green-500/20 px-4 py-2 text-green-400">
-
-                  <BadgeCheck size={18} />
-
-                  {doc.status}
+                <span className="rounded-full bg-yellow-500/10 px-4 py-2 text-yellow-300">
+                  {getStatus(doc.key)}
 
                 </span>
-
-                <button className="rounded-xl border border-cyan-500/20 p-3 hover:bg-cyan-500/10">
-
-                  <Eye className="text-cyan-400" />
-
-                </button>
-
-                <button className="rounded-xl border border-cyan-500/20 p-3 hover:bg-cyan-500/10">
-
-                  <Download className="text-cyan-400" />
-
-                </button>
 
               </div>
 
@@ -106,23 +95,34 @@ export default function DocumentsPage() {
 
       </div>
 
-      <div className="rounded-3xl border border-green-500/20 bg-green-500/10 p-8">
+      <div className="rounded-3xl border border-yellow-500/20 bg-yellow-500/10 p-8">
 
-        <h2 className="text-2xl font-bold text-green-400">
-          OCR Verification Summary
+        <h2 className="text-2xl font-bold text-yellow-300">
+          Verification Status
         </h2>
 
         <div className="mt-6 space-y-3 text-zinc-300">
 
-          <p>✅ Aadhaar details extracted successfully.</p>
-
-          <p>✅ PAN number validated.</p>
-
-          <p>✅ Salary amount matched with OCR output.</p>
-
-          <p>✅ Bank statement verified.</p>
-
-          <p>🔒 All documents processed using encrypted AI pipeline.</p>
+          <p>
+            OCR type checks passed:{" "}
+            {
+              Object.values(fraudAssessment.documentResults).filter(
+                (result) =>
+                  result.documentValid && result.confidence >= 70
+              ).length
+            }
+          </p>
+          <p>
+            Type checks do not establish document authenticity, identity
+            ownership, or bank-account ownership.
+          </p>
+          <p>
+            Fraud assessment:{" "}
+            {fraudAssessment.assessmentCompleted
+              ? fraudAssessment.fraudRisk
+              : "Incomplete"}
+          </p>
+          <p>FHE processing is not verified in this flow.</p>
 
         </div>
 

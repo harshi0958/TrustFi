@@ -99,7 +99,7 @@ export default function LoanHistory() {
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p className="text-xs text-gray-500">
-            AI Credit Score
+            AI Risk Score
           </p>
 
           <p className="mt-2 font-semibold text-cyan-400">

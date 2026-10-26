@@ -9,30 +9,149 @@ import FilePreview from "./FilePreview";
 import UploadProgress from "./UploadProgress";
 import AIScanStatus from "./AIScanStatus";
 import { useLoanStore } from "@/store/loanStore";
+import { uploadDocument, type OCRDocumentType } from "@/lib/api";
+
+interface OCRUploadResponse {
+  success?: unknown;
+  message?: unknown;
+  uploadId?: unknown;
+  ocrSkipped?: unknown;
+  validationMessage?: unknown;
+  extractedText?: {
+    documentValid?: unknown;
+    confidence?: unknown;
+    fraudRisk?: unknown;
+    fraudRiskLevel?: unknown;
+    fraudFlags?: unknown;
+    validationMessage?: unknown;
+    name?: unknown;
+  };
+  fraudAssessment?: {
+    fraudScore?: unknown;
+    fraudRisk?: unknown;
+    fraudFlags?: unknown;
+    validationMessage?: unknown;
+  };
+}
+
+function isOCRUploadResponse(value: unknown): value is OCRUploadResponse {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function getResponseMessage(
+  result: OCRUploadResponse | null
+): string | undefined {
+  const messages = [
+    result?.extractedText?.validationMessage,
+    result?.validationMessage,
+    result?.message,
+  ];
+
+  return messages.find(
+    (message): message is string =>
+      typeof message === "string" && message.length > 0
+  );
+}
 
 interface Props {
   title: string;
-  documentType: string;
-  onUploaded?: () => void;
+  documentType: OCRDocumentType;
+  documentKey?: string;
+  onUploaded?: (uploadId?: string) => void;
   onRemoved?: () => void;
-  onValidation?: (result: any) => boolean | void;
+  onValidation?: (result: OCRUploadResponse) => boolean | void;
 }
 
 export default function UploadCard({
   title,
   documentType,
+  documentKey,
   onUploaded,
   onRemoved,
   onValidation,
 }: Props) {
-  const { updateFraudAssessment } = useLoanStore();
+  const {
+    updateDocumentFraudAssessment,
+    clearDocumentFraudAssessment,
+  } = useLoanStore();
 
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [validationError, setValidationError] = useState("");
+  const [ocrDocumentValid, setOcrDocumentValid] =
+    useState<boolean | null>(null);
+  const [ocrValidationMessage, setOcrValidationMessage] =
+    useState("");
+  const [ocrSkipped, setOcrSkipped] = useState(false);
 
   const isSelfie = documentType === "SELFIE";
+
+  const clearDocumentAssessment = useCallback(() => {
+    if (documentKey) {
+      clearDocumentFraudAssessment(documentKey);
+    }
+  }, [clearDocumentFraudAssessment, documentKey]);
+
+  const recordDocumentAssessment = useCallback((
+    result: OCRUploadResponse,
+    identityValidated = true
+  ) => {
+    if (!documentKey) return;
+
+    const extracted = result?.extractedText;
+    const assessment = result?.fraudAssessment;
+    const fraudScore = Number(
+      assessment?.fraudScore ?? extracted?.fraudRisk
+    );
+    const confidence = Number(extracted?.confidence);
+    const fraudRisk =
+      assessment?.fraudRisk ?? extracted?.fraudRiskLevel;
+    const fraudFlags: unknown =
+      assessment?.fraudFlags ?? extracted?.fraudFlags;
+
+    if (
+      !extracted ||
+      typeof extracted.documentValid !== "boolean" ||
+      !Number.isFinite(fraudScore) ||
+      fraudScore < 0 ||
+      fraudScore > 100 ||
+      !Number.isFinite(confidence) ||
+      confidence < 0 ||
+      confidence > 100 ||
+      (
+        fraudRisk !== "LOW" &&
+        fraudRisk !== "MEDIUM" &&
+        fraudRisk !== "HIGH"
+      ) ||
+      !Array.isArray(fraudFlags) ||
+      !fraudFlags.every((flag: unknown) => typeof flag === "string")
+    ) {
+      clearDocumentAssessment();
+      return;
+    }
+
+    const validationMessage =
+      typeof extracted.validationMessage === "string"
+        ? extracted.validationMessage
+        : typeof assessment?.validationMessage === "string"
+          ? assessment.validationMessage
+          : "";
+
+    updateDocumentFraudAssessment(documentKey, {
+      fraudScore,
+      fraudRisk,
+      fraudFlags: fraudFlags as string[],
+      documentValid:
+        extracted.documentValid === true && identityValidated,
+      confidence,
+      validationMessage,
+    });
+  }, [
+    clearDocumentAssessment,
+    documentKey,
+    updateDocumentFraudAssessment,
+  ]);
 
   /*
    * -----------------------------------------
@@ -71,27 +190,14 @@ export default function UploadCard({
           return;
         }
 
-        const validationResult = onValidation?.({
-          success: true,
-          extractedText: {
-            detectedType: "SELFIE",
-            expectedType: "SELFIE",
-            documentValid: true,
-            confidence: 100,
-            validationMessage: "Selfie uploaded successfully.",
-          },
-        });
-
-        if (validationResult === false) {
-          setFile(null);
-          setProgress(0);
-          return;
-        }
-
+        clearDocumentAssessment();
         setFile(selected);
         setProgress(100);
         setUploading(false);
         setValidationError("");
+        setOcrDocumentValid(null);
+        setOcrValidationMessage("");
+        setOcrSkipped(false);
 
         onUploaded?.();
         return;
@@ -105,158 +211,107 @@ export default function UploadCard({
       setProgress(10);
       setUploading(true);
       setValidationError("");
+      setOcrDocumentValid(null);
+      setOcrValidationMessage("");
+      setOcrSkipped(false);
+      clearDocumentAssessment();
+      onRemoved?.();
 
       try {
-        /*
-         * API URL
-         */
-
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-
-        if (!apiUrl) {
-          throw new Error(
-            "NEXT_PUBLIC_API_URL is not configured."
-          );
-        }
-
-        /*
-         * FORM DATA
-         */
-
-        const formData = new FormData();
-
-        formData.append("document", selected);
-        formData.append("expectedType", documentType);
-
         setProgress(30);
 
         /*
          * OCR API
          */
 
-        const response = await fetch(
-          `${apiUrl}/api/ocr/upload`,
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
+        const result = await uploadDocument(selected, documentType);
 
         setProgress(70);
-
-        let result: any;
-
-        try {
-          result = await response.json();
-        } catch {
-          throw new Error("Invalid response from server.");
-        }
-
-        console.log("OCR RESULT:", result);
 
         /*
          * BACKEND RESPONSE VALIDATION
          */
 
-        if (!response.ok || !result?.success) {
+        const uploadResult = isOCRUploadResponse(result)
+          ? result
+          : null;
+
+        if (
+          !uploadResult ||
+          uploadResult.success !== true
+        ) {
+          if (uploadResult) {
+            recordDocumentAssessment(uploadResult, false);
+          }
           setFile(null);
           setProgress(0);
+          onRemoved?.();
 
           const message =
-            result?.extractedText?.validationMessage ||
-            result?.validationMessage ||
-            result?.message ||
+            getResponseMessage(uploadResult) ||
             "Document upload or validation failed.";
 
           setValidationError(message);
-          onValidation?.(result);
-          return;
-        }
-
-        /*
-         * OCR DOCUMENT VALIDATION
-         */
-
-        const extracted = result?.extractedText;
-
-        if (!extracted || extracted.documentValid !== true) {
-          setFile(null);
-          setProgress(0);
-
-          setValidationError(
-            extracted?.validationMessage ||
-              "Document validation failed. Please upload a valid document."
+          onValidation?.(
+            uploadResult ?? {
+              success: false,
+              message: "Invalid response received from the document service.",
+            }
           );
-
-          onValidation?.(result);
           return;
         }
 
-        /*
-         * APPLICANT IDENTITY VALIDATION
-         *
-         * Aadhaar/PAN name matching and other
-         * frontend identity checks happen here.
-         */
-
-        const validationResult = onValidation?.(result);
-
-        if (validationResult === false) {
-          setFile(null);
-          setProgress(0);
-          return;
-        }
-
-        /*
-         * SAVE FRAUD ASSESSMENT AFTER VALIDATION
-         */
-
-        const fraudAssessment = result?.fraudAssessment;
-
-        const flags =
-          fraudAssessment?.fraudFlags ??
-          extracted?.fraudFlags;
-
-        updateFraudAssessment({
-          fraudScore: Number(
-            fraudAssessment?.fraudScore ??
-              extracted?.fraudRisk ??
-              0
-          ),
-
-          fraudRisk:
-            fraudAssessment?.fraudRisk ??
-            extracted?.fraudRiskLevel ??
-            "LOW",
-
-          fraudFlags: Array.isArray(flags) ? flags : [],
-        });
+        const extracted = uploadResult.extractedText;
+        const validationResult = onValidation?.(uploadResult);
+        recordDocumentAssessment(
+          uploadResult,
+          validationResult !== false
+        );
+        setOcrDocumentValid(
+          typeof extracted?.documentValid === "boolean"
+            ? extracted.documentValid
+            : null
+        );
+        setOcrValidationMessage(
+          typeof extracted?.validationMessage === "string"
+            ? extracted.validationMessage
+            : ""
+        );
+        setOcrSkipped(uploadResult.ocrSkipped === true);
 
         /*
-         * SUCCESS
-         *
-         * Keep the success section only once.
+         * Upload completion is independent of OCR classification or
+         * identity matching. Those results remain visible for review.
          */
 
         setProgress(100);
         setValidationError("");
 
-        onUploaded?.();
+        onUploaded?.(
+          typeof uploadResult.uploadId === "string"
+            ? uploadResult.uploadId
+            : undefined
+        );
       } catch (error) {
         console.error("Document upload error:", error);
+        clearDocumentAssessment();
 
         setFile(null);
         setProgress(0);
+        onRemoved?.();
+        setOcrDocumentValid(null);
+        setOcrValidationMessage("");
+        setOcrSkipped(false);
 
         setValidationError(
           error instanceof Error
             ? error.message
-            : "Document verification failed. Please try again."
+            : "Document upload failed. Please try again."
         );
 
         onValidation?.({
           success: false,
-          message: "Document verification failed.",
+          message: "Document upload failed.",
         });
       } finally {
         setUploading(false);
@@ -267,7 +322,9 @@ export default function UploadCard({
       isSelfie,
       onUploaded,
       onValidation,
-      updateFraudAssessment,
+      onRemoved,
+      clearDocumentAssessment,
+      recordDocumentAssessment,
     ]
   );
 
@@ -312,6 +369,10 @@ export default function UploadCard({
     setProgress(0);
     setUploading(false);
     setValidationError("");
+    setOcrDocumentValid(null);
+    setOcrValidationMessage("");
+    setOcrSkipped(false);
+    clearDocumentAssessment();
 
     onRemoved?.();
   };
@@ -378,7 +439,12 @@ export default function UploadCard({
           {/* AI STATUS */}
 
           {progress === 100 && !validationError && (
-            <AIScanStatus />
+            <AIScanStatus
+              isSelfie={isSelfie}
+              documentValid={ocrDocumentValid}
+              validationMessage={ocrValidationMessage}
+              ocrSkipped={ocrSkipped}
+            />
           )}
 
           {/* ERROR */}
@@ -386,7 +452,7 @@ export default function UploadCard({
           {validationError && (
             <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
               <p className="text-sm font-semibold text-red-400">
-                Document Verification Failed
+                Upload Failed
               </p>
 
               <p className="mt-1 text-sm text-red-300">
